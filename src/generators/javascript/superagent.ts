@@ -8,6 +8,7 @@ import type { FormParam } from "../../curl/form.js";
 import {
   repr,
   reprObj,
+  asParseInt,
   asParseFloatTimes1000,
   type JSImports,
   addImport,
@@ -16,7 +17,7 @@ import {
 
 import { indent } from "./jquery.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -26,6 +27,8 @@ const supportedArgs = new Set([
 
   "location", // --no-location only has an effect
   "max-redirs",
+
+  "retry",
 
   "insecure",
   "cert",
@@ -38,7 +41,7 @@ const supportedArgs = new Set([
 function serializeQuery(
   fn: "query" | "send",
   query: Query,
-  imports: JSImports
+  imports: JSImports,
 ): string {
   const [queryList, queryDict] = query;
   let code = "";
@@ -82,7 +85,7 @@ function _getDataString(
   request: Request,
   contentType: string | null | undefined,
   exactContentType: Word | null | undefined,
-  imports: JSImports
+  imports: JSImports,
 ): [Word | null | undefined, string | null, string | null] {
   if (!request.data) {
     return [exactContentType, null, null];
@@ -126,7 +129,7 @@ export function getDataString(
   request: Request,
   contentType: string | null | undefined,
   exactContentType: Word | null | undefined,
-  imports: JSImports
+  imports: JSImports,
 ): [Word | null | undefined, string | null, string | null] {
   if (!request.data) {
     return [exactContentType, null, null];
@@ -139,7 +142,7 @@ export function getDataString(
       request,
       contentType,
       exactContentType,
-      imports
+      imports,
     );
   } catch {}
   if (!dataString) {
@@ -150,7 +153,7 @@ export function getDataString(
 
 export function getFormString(
   multipartUploads: FormParam[],
-  imports: JSImports
+  imports: JSImports,
 ): string {
   let code = "";
   for (const m of multipartUploads) {
@@ -163,6 +166,7 @@ export function getFormString(
       // }
       code += ", " + repr(m.contentFile, imports);
       if ("filename" in m && m.filename) {
+        // TODO: this is the wrong way to not send a filename
         code += ", " + repr(m.filename, imports);
       }
       code += ")\n";
@@ -180,7 +184,7 @@ export function getFormString(
 
 export function _toNodeSuperAgent(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
   const imports: JSImports = [];
@@ -210,17 +214,17 @@ export function _toNodeSuperAgent(
   let exactContentType = request.headers.get("content-type");
   request.headers.delete("content-type");
   let dataCode, commentedOutDataCode;
-  if (request.data) {
+  if (request.multipartUploads) {
+    dataCode = getFormString(request.multipartUploads, imports);
+    exactContentType = null;
+  } else if (request.data) {
     // might delete content-type header
     [exactContentType, dataCode, commentedOutDataCode] = getDataString(
       request,
       contentType,
       exactContentType,
-      imports
+      imports,
     );
-  } else if (request.multipartUploads) {
-    dataCode = getFormString(request.multipartUploads, imports);
-    exactContentType = null;
   }
   if (nonDataMethods.includes(methodStr) && hasData) {
     warnings.push([
@@ -253,7 +257,7 @@ export function _toNodeSuperAgent(
     code += serializeQuery(
       "query",
       [request.urls[0].queryList, request.urls[0].queryDict ?? null],
-      imports
+      imports,
     );
   }
 
@@ -312,10 +316,9 @@ export function _toNodeSuperAgent(
     code += "  .redirects(" + repr(request.maxRedirects, imports) + ")\n";
   }
 
-  // TODO
-  // if (request.retry) {
-  //   code += "  .retry(" + request.retry.toString() + ")\n";
-  // }
+  if (request.retry) {
+    code += "  .retry(" + asParseInt(request.retry, imports) + ")\n";
+  }
 
   if (request.insecure) {
     code += "  .disableTLSCerts()\n";
@@ -323,7 +326,7 @@ export function _toNodeSuperAgent(
   if (request.cert) {
     const [cert, password] = request.cert;
     code += "  .cert(fs.readFileSync(" + repr(cert, imports) + "))\n";
-    addImport(imports, "fs", "fs");
+    addImport(imports, "* as fs", "fs");
     if (password) {
       warnings.push([
         "cert-password",
@@ -334,12 +337,12 @@ export function _toNodeSuperAgent(
   }
   if (request.key) {
     code += "  .key(fs.readFileSync(" + repr(request.key, imports) + "))\n";
-    addImport(imports, "fs", "fs");
+    addImport(imports, "* as fs", "fs");
   }
   // TODO: is this correct?
   if (request.cacert) {
     code += "  .ca(fs.readFileSync(" + repr(request.cacert, imports) + "))\n";
-    addImport(imports, "fs", "fs");
+    addImport(imports, "* as fs", "fs");
   }
 
   if (request.http2) {
@@ -359,7 +362,7 @@ export function _toNodeSuperAgent(
 
 export function toNodeSuperAgentWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const code = _toNodeSuperAgent(requests, warnings);

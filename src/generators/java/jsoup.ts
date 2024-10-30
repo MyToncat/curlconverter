@@ -4,7 +4,7 @@ import type { Request, Warnings } from "../../parse.js";
 
 import { repr } from "./java.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
 
   "form",
@@ -15,7 +15,7 @@ const supportedArgs = new Set([
 
 export const _toJavaJsoup = (
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string => {
   const request = getFirst(requests, warnings);
 
@@ -82,9 +82,6 @@ export const _toJavaJsoup = (
     javaCode += '\t\t\t.header("Authorization", "Basic " + basicAuth)\n';
   }
 
-  if (request.data) {
-    javaCode += "\t\t\t.requestBody(" + repr(request.data, imports) + ")\n";
-  }
   if (request.multipartUploads) {
     javaCode += "\t\t\t.data(";
 
@@ -131,6 +128,8 @@ export const _toJavaJsoup = (
       }
     }
     javaCode += ")))\n";
+  } else if (request.data) {
+    javaCode += "\t\t\t.requestBody(" + repr(request.data, imports) + ")\n";
   }
 
   // TODO: check method const exists
@@ -161,7 +160,7 @@ export const _toJavaJsoup = (
 };
 export const toJavaJsoupWarn = (
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] => {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const java = _toJavaJsoup(requests, warnings);

@@ -3,7 +3,7 @@ import { Word, eq, joinWords } from "../shell/Word.js";
 import { parse, getFirst, COMMON_SUPPORTED_ARGS } from "../parse.js";
 import type { Request, Warnings } from "../parse.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "compressed",
   "form",
@@ -23,14 +23,12 @@ const supportedArgs = new Set([
 ]);
 
 // https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/strings/
-const regexEscape = /"|\\|\p{C}|\p{Z}/gu;
+const regexEscape = /"|\\|\p{C}|[^ \P{Z}]/gu;
 export function reprStr(s: string): string {
   return (
     '"' +
     s.replace(regexEscape, (c: string): string => {
       switch (c) {
-        case " ":
-          return " ";
         case "\x00":
           return "\\0";
         case "\x07":
@@ -94,7 +92,7 @@ export function repr(w: Word, imports: Set<string>): string {
 
 export function _toCSharp(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
 
@@ -196,10 +194,10 @@ export function _toCSharp(
     "last-modified": "LastModified",
   };
   const reqHeaders = request.headers.headers.filter(
-    (h) => !Object.keys(contentHeaders).includes(h[0].toLowerCase().toString())
+    (h) => !Object.keys(contentHeaders).includes(h[0].toLowerCase().toString()),
   );
   const reqContentHeaders = request.headers.headers.filter((h) =>
-    Object.keys(contentHeaders).includes(h[0].toLowerCase().toString())
+    Object.keys(contentHeaders).includes(h[0].toLowerCase().toString()),
   );
 
   if (
@@ -236,20 +234,6 @@ export function _toCSharp(
       "request.Content = new ByteArrayContent(File.ReadAllBytes(" +
       repr(request.urls[0].uploadFile, imports) +
       "));\n";
-  } else if (request.data) {
-    // TODO: parse
-    if (!request.isDataRaw && request.data.startsWith("@")) {
-      // TODO: stdin
-      s +=
-        "request.Content = new StringContent(File.ReadAllText(" +
-        repr(request.data.slice(1), imports) +
-        ').Replace("\\n", string.Empty).Replace("\\r", string.Empty));\n';
-    } else {
-      s +=
-        "request.Content = new StringContent(" +
-        repr(request.data, imports) +
-        ");\n";
-    }
   } else if (request.multipartUploads) {
     s += "\n";
     // TODO: get boundary from header
@@ -304,6 +288,20 @@ export function _toCSharp(
       }
     }
     s += "request.Content = content;\n";
+  } else if (request.data) {
+    // TODO: parse
+    if (!request.isDataRaw && request.data.startsWith("@")) {
+      // TODO: stdin
+      s +=
+        "request.Content = new StringContent(File.ReadAllText(" +
+        repr(request.data.slice(1), imports) +
+        ').Replace("\\n", string.Empty).Replace("\\r", string.Empty));\n';
+    } else {
+      s +=
+        "request.Content = new StringContent(" +
+        repr(request.data, imports) +
+        ");\n";
+    }
   } else if (request.headers.has("content-type")) {
     // This needs to be at the end.
     // If the request has no content, you can't set the content-type
@@ -374,7 +372,7 @@ export function _toCSharp(
 }
 export function toCSharpWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const cSharp = _toCSharp(requests, warnings);

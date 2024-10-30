@@ -3,7 +3,7 @@ import { Word, eq, mergeWords } from "../shell/Word.js";
 import { parse, COMMON_SUPPORTED_ARGS } from "../parse.js";
 import type { Request, Warnings } from "../parse.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "cookie-jar",
 
@@ -37,6 +37,9 @@ const supportedArgs = new Set([
   "globoff",
   "no-globoff",
 
+  "netrc",
+  "netrc-optional",
+
   "timeout",
   "connect-timeout",
   "limit-rate",
@@ -64,18 +67,25 @@ const supportedArgs = new Set([
   "output",
   "upload-file",
 
+  "continue-at",
+  "clobber",
+  "remote-time",
+
+  "keep-alive",
+
+  "silent",
+  "verbose",
+
   "next",
 ]);
 
 // TODO: check this
 // https://www.gnu.org/software/bash/manual/html_node/Quoting.html
 const regexDoubleEscape = /\$|`|"|\\|!/gu;
-// Use negative lookahead because " " is a Z but we don't want to escape it
-// Wrap \p{C}|\p{Z} in brakets so that splitting keeps the characters to escape
-const unprintableChars = /(?! )(\p{C}|\p{Z})/gu; // TODO: there's probably more
-const regexAnsiCEscape = /\p{C}|\p{Z}|\\|'/gu;
+const unprintableChars = /\p{C}|[^ \P{Z}]/gu; // TODO: there's probably more
+const regexAnsiCEscape = /\p{C}|[^ \P{Z}]|\\|'/gu;
 // https://unix.stackexchange.com/questions/270977/
-const shellChars = /[\002-\011\013-\032\\#?`(){}[\]^*<=>~|; "!$&'\202-\377]/;
+const shellChars = /[\x02-\x09\x0b-\x1a\\#?`(){}[\]^*<=>~|; "!$&'\x82-\xff]/;
 export function reprStr(s: string, mustQuote = false): string {
   const containsUnprintableChars = unprintableChars.test(s);
   if (containsUnprintableChars) {
@@ -83,8 +93,6 @@ export function reprStr(s: string, mustQuote = false): string {
       "$'" +
       s.replace(regexAnsiCEscape, (c: string) => {
         switch (c) {
-          case " ":
-            return " ";
           case "\x07":
             return "\\a";
           case "\b":
@@ -223,7 +231,7 @@ function requestToWget(request: Request, warnings: Warnings): string {
   }
   if (request.urls.length > 1) {
     const uniqueMethods = new Set<string>(
-      request.urls.map((u) => u.method.toString())
+      request.urls.map((u) => u.method.toString()),
     );
 
     // TODO: add tons of checks/warnings that wget doesn't let you set things per-URL
@@ -238,11 +246,19 @@ function requestToWget(request: Request, warnings: Warnings): string {
     }
   }
 
-  if (request.cookieFiles) {
-    // TODO: just take the last one
-    // TODO: does this work?
+  if (request.cookieFiles && request.cookieFiles.length) {
     for (const cookieFile of request.cookieFiles) {
       args.push("--load-cookies=" + repr(cookieFile));
+    }
+
+    if (request.cookieFiles.length > 1) {
+      const lastCookieFile =
+        request.cookieFiles[request.cookieFiles.length - 1];
+      warnings.push([
+        "multiple-cookie-files",
+        "Wget only supports reading cookies from one file, only the last one will be sent: " +
+          lastCookieFile.toString(),
+      ]);
     }
   }
   if (request.cookieJar) {
@@ -253,7 +269,7 @@ function requestToWget(request: Request, warnings: Warnings): string {
   if (request.headers.length) {
     for (const [headerName, headerValue] of request.headers) {
       args.push(
-        "--header=" + repr(mergeWords([headerName, ": ", headerValue ?? ""]))
+        "--header=" + repr(mergeWords(headerName, ": ", headerValue ?? "")),
       );
       // TODO: there's also --referer, --user-agent and --content-disposition
     }
@@ -291,7 +307,7 @@ function requestToWget(request: Request, warnings: Warnings): string {
 
     if (
       !["none", "basic", "digest", "ntlm", "ntlm-wb", "negotiate"].includes(
-        request.authType
+        request.authType,
       )
     ) {
       warnings.push([
@@ -316,6 +332,11 @@ function requestToWget(request: Request, warnings: Warnings): string {
     } else {
       args.push("--body-file=" + repr(request.urls[0].uploadFile));
     }
+  } else if (request.multipartUploads) {
+    warnings.push([
+      "multipart",
+      "Wget does not support sending multipart/form-data",
+    ]);
   } else if (
     request.dataArray &&
     request.dataArray.length === 1 &&
@@ -333,8 +354,6 @@ function requestToWget(request: Request, warnings: Warnings): string {
     } else {
       args.push("--body-data=" + repr(request.data));
     }
-  } else if (request.multipartUploads) {
-    warnings.push(["multipart", "Wget does not support multipart/form-data"]);
   }
 
   // https://www.gnu.org/software/wget/manual/html_node/HTTPS-_0028SSL_002fTLS_0029-Options.html
@@ -391,6 +410,10 @@ function requestToWget(request: Request, warnings: Warnings): string {
   }
   // TODO: --secure-protocol
 
+  if (request.netrc === "ignored") {
+    args.push("--no-netrc");
+  }
+
   if (request.noproxy) {
     if (eq(request.noproxy, "*")) {
       args.push("--no-proxy");
@@ -430,11 +453,31 @@ function requestToWget(request: Request, warnings: Warnings): string {
     args.push("--limit-rate=" + repr(request.limitRate));
   }
 
+  // TODO: this doesn't match up. Warn if multiple, etc.
   if (request.urls[0].output) {
-    // TODO: --no-clobber ?
     args.push("--output-document=" + repr(request.urls[0].output));
   } else {
     args.push("--output-document -");
+  }
+  if (request.clobber === false) {
+    args.push("--no-clobber");
+  }
+  // TODO: --create-dirs
+
+  if (request.remoteTime === false) {
+    args.push("--no-use-server-timestamps");
+  }
+
+  if (request.continueAt) {
+    if (eq(request.continueAt, "-")) {
+      args.push("--continue");
+    } else {
+      args.push("--start-pos=" + repr(request.continueAt));
+    }
+  }
+
+  if (request.keepAlive === false) {
+    args.push("--no-http-keep-alive");
   }
 
   // This is used only for FTP by Wget, we might as well add it even
@@ -443,6 +486,21 @@ function requestToWget(request: Request, warnings: Warnings): string {
     // TODO: this isn't great, it has different meanings from curl to Wget
     // TODO: don't remove \[ and \] from original URL?
     args.push("--no-glob");
+  }
+
+  // TODO:
+  // curl:
+  // --silent, --verbose, --no-verbose (the default)
+  // --progress-meter (the default), --no-progress-meter, --progress-bar
+  // --trace-ascii, --trace
+  // wget:
+  // --quiet, --verbose (the default), --no-verbose
+  // --progress=bar (the default), --progress=dot
+  // --debug
+  if (request.silent) {
+    args.push("--quiet");
+  } else if (request.verbose === false) {
+    args.push("--no-verbose");
   }
 
   for (const url of request.urls) {
@@ -463,7 +521,7 @@ export function _toWget(requests: Request[], warnings: Warnings = []): string {
 
 export function toWgetWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const wget = _toWget(requests, warnings);

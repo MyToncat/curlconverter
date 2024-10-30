@@ -19,7 +19,12 @@
       }
     ],
     "authType": "basic",
+    "proxyAuthType": "basic",
     "headers": {
+      "lowercase": false,
+      "headers": []
+    },
+    "proxyHeaders": {
       "lowercase": false,
       "headers": []
     }

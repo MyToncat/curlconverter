@@ -1,23 +1,26 @@
 import { warnIfPartsIgnored } from "../../Warnings.js";
-import { Word, eq } from "../../shell/Word.js";
+import { Word, eq, mergeWords } from "../../shell/Word.js";
 import { parse, COMMON_SUPPORTED_ARGS } from "../../parse.js";
 import type { Request, Warnings } from "../../parse.js";
 
 import { repr, type JSImports, reprImportsRequire } from "./javascript.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   // "form",
   // "form-string",
   "next",
 ]);
 
+// https://github.com/nodejs/node/blob/135948d584ab6864b217b504f3eddf426d533bd4/lib/_http_client.js#L106
+const INVALID_PATH_REGEX = /[^\u0021-\u00ff]/;
+
 function requestToNodeRequest(
   request: Request,
   requestIndex: number,
   definedVariables: Set<string>,
   imports: JSImports,
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   warnIfPartsIgnored(request, warnings);
 
@@ -42,12 +45,25 @@ function requestToNodeRequest(
     nodeRequestCode += defVar(
       definedVariables,
       "dataString",
-      repr(request.data, imports) + ";\n\n"
+      repr(request.data, imports) + ";\n\n",
     );
   }
 
   nodeRequestCode += defVar(definedVariables, "options", "{\n");
-  nodeRequestCode += "    url: " + repr(request.urls[0].url, imports);
+  const path = mergeWords(
+    request.urls[0].urlObj.path,
+    request.urls[0].urlObj.query,
+  );
+  if (path.toBool() && INVALID_PATH_REGEX.test(path.toString())) {
+    warnings.push([
+      "invalid-path-characters",
+      "encodeURI() is needed because request path contains unescaped characters",
+    ]);
+    nodeRequestCode +=
+      "    url: encodeURI(" + repr(request.urls[0].url, imports) + ")";
+  } else {
+    nodeRequestCode += "    url: " + repr(request.urls[0].url, imports);
+  }
   if (!eq(request.urls[0].method.toUpperCase(), "GET")) {
     nodeRequestCode +=
       ",\n    method: " + repr(request.urls[0].method.toUpperCase(), imports);
@@ -109,21 +125,21 @@ function defVar(variables: Set<string>, name: string, value: string): string {
 
 export function _toNodeRequest(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const code = "var request = require('request');\n";
   const definedVariables = new Set(["request"]);
 
   const imports: JSImports = [];
   const requestCode = requests.map((r, i) =>
-    requestToNodeRequest(r, i, definedVariables, imports, warnings)
+    requestToNodeRequest(r, i, definedVariables, imports, warnings),
   );
   return code + reprImportsRequire(imports) + "\n" + requestCode.join("\n\n");
 }
 
 export function toNodeRequestWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   warnings.unshift(["node-request", "the request package is deprecated"]);

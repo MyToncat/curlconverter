@@ -5,7 +5,7 @@ import { parseQueryString } from "../Query.js";
 
 import { esc as jsesc } from "./javascript/javascript.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "compressed",
   "form",
@@ -34,7 +34,9 @@ function repr(value: Word, imports: Set<string>): string {
       imports.add("dart:io");
     } else {
       ret.push(
-        "(await Process.run(" + reprStr(t.value) + ", runInShell: true)).stdout"
+        "(await Process.run(" +
+          reprStr(t.value) +
+          ", runInShell: true)).stdout",
       );
       imports.add("dart:io");
     }
@@ -118,8 +120,8 @@ export function _toDart(requests: Request[], warnings: Warnings = []): string {
     s += "\n";
   }
 
-  const hasData = request.data;
-  if (request.data) {
+  const hasData = request.data && !request.multipartUploads;
+  if (hasData && request.data) {
     const [parsedQuery] = parseQueryString(request.data);
     if (parsedQuery && parsedQuery.length) {
       s += "  final data = {\n";
@@ -241,7 +243,6 @@ export function _toDart(requests: Request[], warnings: Warnings = []): string {
       s += "  final res = await http.Response.fromStream(stream);\n";
     }
 
-    /* eslint-disable no-template-curly-in-string */
     s +=
       "  final status = res.statusCode;\n" +
       "  if (status != 200) throw Exception('http.send" +
@@ -260,7 +261,6 @@ export function _toDart(requests: Request[], warnings: Warnings = []): string {
     if (hasData) s += ", body: data";
     s += ");\n";
 
-    /* eslint-disable no-template-curly-in-string */
     s +=
       "  final status = res.statusCode;\n" +
       "  if (status != 200) throw Exception('http." +
@@ -281,7 +281,7 @@ export function _toDart(requests: Request[], warnings: Warnings = []): string {
 
 export function toDartWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const dart = _toDart(requests, warnings);

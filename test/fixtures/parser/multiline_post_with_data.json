@@ -19,6 +19,7 @@
       }
     ],
     "authType": "basic",
+    "proxyAuthType": "basic",
     "headers": {
       "lowercase": false,
       "headers": [
@@ -31,6 +32,10 @@
           "application/x-www-form-urlencoded"
         ]
       ]
+    },
+    "proxyHeaders": {
+      "lowercase": false,
+      "headers": []
     },
     "data": "msg1=value1&msg2=value2",
     "dataArray": [

@@ -5,7 +5,7 @@ import { parseQueryString, type QueryList, type QueryDict } from "../Query.js";
 
 import yaml from "yamljs";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "compressed",
   "no-compressed", // only explicitly disabling compression has an effect
@@ -105,7 +105,7 @@ type AnsibleURI = {
 
 function getDataString(
   request: Request,
-  warnings: Warnings
+  warnings: Warnings,
 ): [Body, BodyFormat] | [string, "src"] | undefined {
   if (!request.data || !request.data.isString()) {
     return;
@@ -151,7 +151,7 @@ function getDataString(
             Array.isArray(q[1])
               ? q[1].map((qv) => qv.toString())
               : q[1].toString(),
-          ])
+          ]),
         ),
         "form-urlencoded",
       ];
@@ -168,7 +168,7 @@ function getDataString(
 
 export function _toAnsible(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   // Only supported if there's one file and nothing else
   const request = getFirst(requests, warnings, { dataReadsFile: true });
@@ -191,22 +191,7 @@ export function _toAnsible(
     url: request.urls[0].url.toString(),
     method: request.urls[0].method.toString(),
   };
-  if (request.data) {
-    const d = getDataString(request, warnings);
-    if (d) {
-      const [body, format] = d;
-      if (format === "src") {
-        r.src = body;
-      } else {
-        r.body = body;
-        if (format !== "raw") {
-          r.body_format = format;
-        }
-      }
-    } else {
-      r.body = request.data.toString();
-    }
-  } else if (request.multipartUploads) {
+  if (request.multipartUploads) {
     const form: AnsibleForm = {};
     for (const m of request.multipartUploads) {
       // TODO: can't have duplicate keys
@@ -227,9 +212,27 @@ export function _toAnsible(
           ]);
         }
       }
+      if ("contentType" in m && m.contentType) {
+        form[name].mime_type = m.contentType.toString();
+      }
     }
     r.body = form;
     r.body_format = "form-multipart";
+  } else if (request.data) {
+    const d = getDataString(request, warnings);
+    if (d) {
+      const [body, format] = d;
+      if (format === "src") {
+        r.src = body;
+      } else {
+        r.body = body;
+        if (format !== "raw") {
+          r.body_format = format;
+        }
+      }
+    } else {
+      r.body = request.data.toString();
+    }
   } else if (request.urls[0].uploadFile) {
     r.src = request.urls[0].uploadFile.toString();
   }
@@ -345,12 +348,12 @@ export function _toAnsible(
       },
     ],
     100,
-    2
+    2,
   );
 }
 export function toAnsibleWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const ansible = _toAnsible(requests, warnings);

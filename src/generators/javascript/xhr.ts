@@ -7,15 +7,14 @@ import {
   repr,
   reprObj,
   asParseFloatTimes1000,
+  toURLSearchParams,
   type JSImports,
   reprImports,
-  reprAsStringToStringDict,
-  reprAsStringTuples,
 } from "./javascript.js";
 
 import { dedent, getFormString } from "./jquery.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -25,7 +24,7 @@ const supportedArgs = new Set([
 function _getDataString(
   data: Word,
   contentType: string | null | undefined,
-  imports: JSImports
+  imports: JSImports,
 ): [string, string | null] {
   const originalStringRepr = repr(data, imports);
 
@@ -43,12 +42,8 @@ function _getDataString(
   if (contentType === "application/x-www-form-urlencoded") {
     const [queryList, queryDict] = parseQueryString(data);
     if (queryList) {
-      const queryObj =
-        queryDict && queryDict.every((q) => !Array.isArray(q[1]))
-          ? reprAsStringToStringDict(queryDict as [Word, Word][], 1, imports)
-          : reprAsStringTuples(queryList, 1, imports);
       // TODO: check roundtrip, add a comment
-      return ["new URLSearchParams(" + queryObj + ")", null];
+      return [toURLSearchParams([queryList, queryDict], imports), null];
     }
   }
   return [originalStringRepr, null];
@@ -57,7 +52,7 @@ function _getDataString(
 export function getDataString(
   data: Word,
   contentType: string | null | undefined,
-  imports: JSImports
+  imports: JSImports,
 ): [string, string | null] {
   let dataString: string | null = null;
   let commentedOutDataString: string | null = null;
@@ -65,7 +60,7 @@ export function getDataString(
     [dataString, commentedOutDataString] = _getDataString(
       data,
       contentType,
-      imports
+      imports,
     );
   } catch {}
   if (!dataString) {
@@ -76,7 +71,7 @@ export function getDataString(
 
 export function _toJavaScriptXHR(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
   const imports: JSImports = [];
@@ -101,12 +96,14 @@ export function _toJavaScriptXHR(
   const url = request.urls[0].url;
 
   const contentType = request.headers.getContentType();
-  if (request.data) {
+  if (request.multipartUploads) {
+    code += getFormString(request.multipartUploads, imports);
+  } else if (request.data) {
     // might delete content-type header
     const [dataString, commentedOutDataString] = getDataString(
       request.data,
       contentType,
-      imports
+      imports,
     );
     if (commentedOutDataString) {
       code += "// const data = " + commentedOutDataString + ";\n";
@@ -114,8 +111,6 @@ export function _toJavaScriptXHR(
     if (dataString) {
       code += "const data = " + dedent(dataString) + ";\n\n";
     }
-  } else if (request.multipartUploads) {
-    code += getFormString(request.multipartUploads, imports);
   }
   if (nonDataMethods.includes(methodStr) && hasData) {
     warnings.push([
@@ -168,10 +163,10 @@ export function _toJavaScriptXHR(
   code += "};\n";
   code += "\n";
 
-  if (request.data) {
-    code += "xhr.send(data);\n";
-  } else if (request.multipartUploads) {
+  if (request.multipartUploads) {
     code += "xhr.send(form);\n";
+  } else if (request.data) {
+    code += "xhr.send(data);\n";
   } else {
     code += "xhr.send();\n";
   }
@@ -186,7 +181,7 @@ export function _toJavaScriptXHR(
 
 export function toJavaScriptXHRWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const code = _toJavaScriptXHR(requests, warnings);

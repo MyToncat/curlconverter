@@ -3,7 +3,7 @@ import type { Request, Warnings } from "../parse.js";
 import type { AuthType } from "../Request.js";
 import { parseQueryString } from "../Query.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
 
   "insecure",
@@ -18,7 +18,12 @@ const supportedArgs = new Set([
   "no-location",
   "location-trusted",
   "no-location-trusted",
+  "max-redirs",
 
+  "output",
+  "include",
+
+  "proxy",
   "max-time",
   "connect-timeout",
 
@@ -37,8 +42,7 @@ const supportedArgs = new Set([
   "no-ntlm-wb",
 ]);
 
-// TODO: export this or Request
-type JSONOutput = {
+export type JSONOutput = {
   url: string;
   raw_url: string;
   method: string;
@@ -46,27 +50,33 @@ type JSONOutput = {
   headers?: { [key: string]: string | null };
   queries?: { [key: string]: string | string[] };
   // `| any` because of JSON
-  data?: { [key: string]: string } | any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  data?: { [key: string]: string } | string | any;
   // raw_data?: string[],
   files?: { [key: string]: string };
   // raw_files: string[],
   insecure?: boolean;
   compressed?: boolean;
 
+  include?: boolean;
   auth?: { user: string; password: string };
   auth_type?: AuthType;
   aws_sigv4?: string;
   delegation?: string;
 
   follow_redirects?: boolean; // --location
+  max_redirects?: number;
+
+  proxy?: string;
 
   timeout?: number; // --max-time
   connect_timeout?: number;
+
+  output?: string;
 };
 
-function getDataString(request: Request): {
-  data?: { [key: string]: string | string[] };
-} {
+function getDataString(
+  request: Request,
+): { [key: string]: string | string[] } | string {
   if (!request.data) {
     return {};
   }
@@ -74,42 +84,36 @@ function getDataString(request: Request): {
   const contentType = request.headers.getContentType();
   if (contentType === "application/json") {
     try {
-      const json = JSON.parse(request.data.toString());
-      return { data: json };
+      return JSON.parse(request.data.toString());
     } catch (e) {}
   }
 
-  const [parsedQuery, parsedQueryDict] = parseQueryString(request.data);
-  if (!parsedQuery || !parsedQuery.length) {
-    // TODO: this is not a good API
-    return {
-      data: {
-        [request.data.toString()]: "",
-      },
-    };
-  }
-  if (parsedQueryDict) {
-    const data = Object.fromEntries(
-      parsedQueryDict.map((param) => [
-        param[0].toString(),
-        Array.isArray(param[1])
-          ? param[1].map((v) => v.toString())
-          : param[1].toString(),
-      ])
-    );
-    return { data };
-  } else {
-    return {
+  if (contentType === "application/x-www-form-urlencoded") {
+    const [parsedQuery, parsedQueryDict] = parseQueryString(request.data);
+    if (parsedQueryDict) {
+      return Object.fromEntries(
+        parsedQueryDict.map((param) => [
+          param[0].toString(),
+          Array.isArray(param[1])
+            ? param[1].map((v) => v.toString())
+            : param[1].toString(),
+        ]),
+      );
+    }
+    if (parsedQuery) {
       // .fromEntries() means we lose data when there are repeated keys
-      data: Object.fromEntries(
-        parsedQuery.map((param) => [param[0].toString(), param[1].toString()])
-      ),
-    };
+      return Object.fromEntries(
+        parsedQuery.map((param) => [param[0].toString(), param[1].toString()]),
+      );
+    }
   }
+
+  // TODO: this leads to ambiguity with JSON strings
+  return request.data.toString();
 }
 
 function getFilesString(
-  request: Request
+  request: Request,
 ):
   | { files?: { [key: string]: string }; data?: { [key: string]: string } }
   | undefined {
@@ -139,23 +143,24 @@ function getFilesString(
   };
 }
 
-export function _toJsonString(
+export function _toJsonObject(
   requests: Request[],
-  warnings: Warnings = []
-): string {
+  warnings: Warnings = [],
+): JSONOutput {
   const request = getFirst(requests, warnings);
+  const requestUrl = request.urls[0];
 
   const requestJson: JSONOutput = {
-    url: (request.urls[0].queryDict
-      ? request.urls[0].urlWithoutQueryList
-      : request.urls[0].url
+    url: (requestUrl.queryDict
+      ? requestUrl.urlWithoutQueryList
+      : requestUrl.url
     )
       .toString()
       .replace(/\/$/, ""),
     // url: request.queryDict ? request.urlWithoutQueryList : request.url,
-    raw_url: request.urls[0].url.toString(),
+    raw_url: requestUrl.url.toString(),
     // TODO: move this after .query?
-    method: request.urls[0].method.toLowerCase().toString(), // lowercase for backwards compatibility
+    method: requestUrl.method.toLowerCase().toString(), // lowercase for backwards compatibility
   };
   // if (request.queryDict) {
   //   requestJson.query = request.queryDict
@@ -164,7 +169,7 @@ export function _toJsonString(
   if (request.cookies) {
     // TODO: repeated cookies
     requestJson.cookies = Object.fromEntries(
-      request.cookies.map((c) => [c[0].toString(), c[1].toString()])
+      request.cookies.map((c) => [c[0].toString(), c[1].toString()]),
     );
     // Normally when a generator uses .cookies, it should delete it from
     // headers, but users of the JSON output would expect to have all the
@@ -180,20 +185,20 @@ export function _toJsonString(
     requestJson.headers = Object.fromEntries(headers);
   }
 
-  if (request.urls[0].queryDict) {
+  if (requestUrl.queryDict) {
     // TODO: rename
     requestJson.queries = Object.fromEntries(
-      request.urls[0].queryDict.map((q) => [
+      requestUrl.queryDict.map((q) => [
         q[0].toString(),
         Array.isArray(q[1]) ? q[1].map((qq) => qq.toString()) : q[1].toString(),
-      ])
+      ]),
     );
   }
 
-  // TODO: not Object.assign, doesn't work with type system
   if (request.data) {
-    Object.assign(requestJson, getDataString(request));
+    requestJson.data = getDataString(request);
   } else if (request.multipartUploads) {
+    // TODO: not Object.assign, doesn't work with type system
     Object.assign(requestJson, getFilesString(request));
   }
 
@@ -201,11 +206,16 @@ export function _toJsonString(
     requestJson.compressed = true;
   }
   if (request.insecure) {
+    // TODO: rename to verify? insecure=false doesn't make sense
     requestJson.insecure = false;
   }
 
-  if (request.urls[0].auth) {
-    const [user, password] = request.urls[0].auth;
+  if (request.include) {
+    requestJson.include = true;
+  }
+
+  if (requestUrl.auth) {
+    const [user, password] = requestUrl.auth;
     requestJson.auth = {
       user: user.toString(),
       password: password.toString(),
@@ -223,6 +233,13 @@ export function _toJsonString(
 
   if (Object.prototype.hasOwnProperty.call(request, "followRedirects")) {
     requestJson.follow_redirects = request.followRedirects;
+    if (request.maxRedirects) {
+      requestJson.max_redirects = parseInt(request.maxRedirects.toString(), 10);
+    }
+  }
+
+  if (request.proxy) {
+    requestJson.proxy = request.proxy.toString();
   }
 
   if (request.timeout) {
@@ -232,17 +249,40 @@ export function _toJsonString(
     requestJson.connect_timeout = parseFloat(request.connectTimeout.toString());
   }
 
+  if (requestUrl.output) {
+    requestJson.output = requestUrl.output.toString();
+  }
+
+  return requestJson;
+}
+export function toJsonObjectWarn(
+  curlCommand: string | string[],
+  warnings: Warnings = [],
+): [JSONOutput, Warnings] {
+  const requests = parse(curlCommand, supportedArgs, warnings);
+  const json = _toJsonObject(requests, warnings);
+  return [json, warnings];
+}
+export function toJsonObject(curlCommand: string | string[]): JSONOutput {
+  return toJsonObjectWarn(curlCommand)[0];
+}
+
+export function _toJsonString(
+  requests: Request[],
+  warnings: Warnings = [],
+): string {
+  const requestJson = _toJsonObject(requests, warnings);
   return (
     JSON.stringify(
       Object.keys(requestJson).length ? requestJson : "{}",
       null,
-      4
+      4,
     ) + "\n"
   );
 }
 export function toJsonStringWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const json = _toJsonString(requests, warnings);
