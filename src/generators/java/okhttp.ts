@@ -5,7 +5,7 @@ import { parseQueryString } from "../../Query.js";
 
 import { repr } from "./java.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "max-time",
   "connect-timeout",
@@ -18,7 +18,7 @@ const supportedArgs = new Set([
 
 export function _toJavaOkHttp(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
   const url = request.urls[0];
@@ -36,7 +36,9 @@ export function _toJavaOkHttp(
   const clientLines = [];
   if (request.timeout) {
     clientLines.push(
-      "    .callTimeout(" + request.timeout.toString() + ", TimeUnit.SECONDS)\n"
+      "    .callTimeout(" +
+        request.timeout.toString() +
+        ", TimeUnit.SECONDS)\n",
     );
     imports.add("java.util.concurrent.TimeUnit");
   }
@@ -44,7 +46,7 @@ export function _toJavaOkHttp(
     clientLines.push(
       "    .connectTimeout(" +
         request.connectTimeout.toString() +
-        ", TimeUnit.SECONDS)\n"
+        ", TimeUnit.SECONDS)\n",
     );
     imports.add("java.util.concurrent.TimeUnit");
   }
@@ -90,6 +92,38 @@ export function _toJavaOkHttp(
     javaCode +=
       "File file = new File(" + repr(url.uploadFile, imports) + ");\n\n";
     imports.add("java.io.File");
+  } else if (request.multipartUploads) {
+    methodCallArgs.push("requestBody");
+    javaCode += "RequestBody requestBody = new MultipartBody.Builder()\n";
+    javaCode += "    .setType(MultipartBody.FORM)\n";
+    for (const m of request.multipartUploads) {
+      const args = [repr(m.name, imports)];
+      if ("content" in m) {
+        args.push(repr(m.content, imports));
+      } else {
+        if ("filename" in m && m.filename) {
+          if (!eq(m.filename, m.contentFile)) {
+            args.push(repr(m.filename, imports));
+          }
+          args.push(
+            "RequestBody.create(" +
+              '"", ' + // TODO: this is the media type
+              "new File(" +
+              repr(m.contentFile, imports) +
+              "))",
+          );
+          imports.add("java.io.File");
+        } else {
+          // TODO: import
+          // TODO: probably doesn't work
+          args.push("Files.readAllBytes(" + repr(m.contentFile, imports) + ")");
+        }
+      }
+      javaCode += "    .addFormDataPart(" + args.join(", ") + ")\n";
+    }
+    javaCode += "    .build();\n\n";
+    imports.add("okhttp3.RequestBody");
+    imports.add("okhttp3.MultipartBody");
   } else if (
     request.dataArray &&
     request.dataArray.length === 1 &&
@@ -132,38 +166,6 @@ export function _toJavaOkHttp(
       javaCode +=
         "String requestBody = " + repr(request.data, imports) + ";\n\n";
     }
-  } else if (request.multipartUploads) {
-    methodCallArgs.push("requestBody");
-    javaCode += "RequestBody requestBody = new MultipartBody.Builder()\n";
-    javaCode += "    .setType(MultipartBody.FORM)\n";
-    for (const m of request.multipartUploads) {
-      const args = [repr(m.name, imports)];
-      if ("content" in m) {
-        args.push(repr(m.content, imports));
-      } else {
-        if ("filename" in m && m.filename) {
-          if (!eq(m.filename, m.contentFile)) {
-            args.push(repr(m.filename, imports));
-          }
-          args.push(
-            "RequestBody.create(" +
-              '"", ' + // TODO: this is the media type
-              "new File(" +
-              repr(m.contentFile, imports) +
-              "))"
-          );
-          imports.add("java.io.File");
-        } else {
-          // TODO: import
-          // TODO: probably doesn't work
-          args.push("Files.readAllBytes(" + repr(m.contentFile, imports) + ")");
-        }
-      }
-      javaCode += "    .addFormDataPart(" + args.join(", ") + ")\n";
-    }
-    javaCode += "    .build();\n\n";
-    imports.add("okhttp3.RequestBody");
-    imports.add("okhttp3.MultipartBody");
   }
 
   javaCode += "Request request = new Request.Builder()\n";
@@ -243,7 +245,7 @@ export function _toJavaOkHttp(
 }
 export function toJavaOkHttpWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const java = _toJavaOkHttp(requests, warnings);

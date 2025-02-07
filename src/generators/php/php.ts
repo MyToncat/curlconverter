@@ -1,8 +1,8 @@
-import { Word, joinWords } from "../../shell/Word.js";
+import { Word, eq, joinWords } from "../../shell/Word.js";
 import { parse, getFirst, COMMON_SUPPORTED_ARGS } from "../../parse.js";
 import type { Request, Warnings } from "../../parse.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "max-time",
   "insecure",
@@ -19,6 +19,7 @@ const supportedArgs = new Set([
   "form-string",
   "proxy",
   "proxy-user",
+  "unix-socket",
 ]);
 
 // https://www.php.net/manual/en/language.types.string.php
@@ -27,7 +28,7 @@ const supportedArgs = new Set([
 // https://unicode.org/Public/UNIDATA/UnicodeData.txt
 // https://en.wikipedia.org/wiki/Plane_(Unicode)#Overview
 const regexSingleEscape = /'|\\/gu;
-const regexDoubleEscape = /"|\$|\\|\p{C}|\p{Z}/gu;
+const regexDoubleEscape = /"|\$|\\|\p{C}|[^ \P{Z}]/gu;
 export function reprStr(s: string): string {
   let [quote, regex] = ["'", regexSingleEscape];
   if ((s.includes("'") && !s.includes('"')) || /[^\x20-\x7E]/.test(s)) {
@@ -39,8 +40,6 @@ export function reprStr(s: string): string {
     s.replace(regex, (c: string) => {
       switch (c) {
         // https://www.php.net/manual/en/language.types.string.php#language.types.string.syntax.double
-        case " ":
-          return " ";
         case "$":
           return quote === "'" ? "$" : "\\$";
         case "\\":
@@ -89,7 +88,8 @@ export function repr(w: Word): string {
 }
 
 export function _toPhp(requests: Request[], warnings: Warnings = []): string {
-  const request = getFirst(requests, warnings);
+  // TODO: only reading one file is supported
+  const request = getFirst(requests, warnings, { dataReadsFile: true });
 
   let cookieString;
   if (request.headers.has("cookie")) {
@@ -146,21 +146,37 @@ export function _toPhp(requests: Request[], warnings: Warnings = []): string {
     if (request.multipartUploads) {
       requestDataCode = "[\n";
       for (const m of request.multipartUploads) {
+        requestDataCode += "    " + repr(m.name) + " => ";
         if ("contentFile" in m) {
-          requestDataCode +=
-            "    " +
-            repr(m.name) +
-            " => new CURLFile(" +
-            repr(m.contentFile) +
-            "),\n";
+          requestDataCode += "new CURLFile(" + repr(m.contentFile);
+          if (m.contentType) {
+            requestDataCode += ", " + repr(m.contentType);
+          }
+          if (m.filename && !eq(m.filename, m.contentFile)) {
+            if (!m.contentType) {
+              // This actually sets it to the default, application/octet-stream
+              requestDataCode += ", null";
+            }
+            requestDataCode += ", " + repr(m.filename);
+          }
+          requestDataCode += ")";
         } else {
-          requestDataCode +=
-            "    " + repr(m.name) + " => " + repr(m.content) + ",\n";
+          if ("filename" in m && m.filename) {
+            requestDataCode += "new CURLStringFile(" + repr(m.content);
+            requestDataCode += ", " + repr(m.filename);
+            if (m.contentType) {
+              requestDataCode += ", " + repr(m.contentType);
+            }
+            requestDataCode += ")";
+          } else {
+            requestDataCode += repr(m.content);
+          }
         }
+        requestDataCode += ",\n";
       }
       requestDataCode += "]";
     } else if (request.isDataBinary && request.data!.charAt(0) === "@") {
-      // TODO: check, used to be substring(1)
+      // TODO: do this properly with .dataArray
       requestDataCode =
         "file_get_contents(" + repr(request.data!.slice(1)) + ")";
     } else {
@@ -188,6 +204,13 @@ export function _toPhp(requests: Request[], warnings: Warnings = []): string {
       ");\n";
   }
 
+  if (request.unixSocket) {
+    phpCode +=
+      "curl_setopt($ch, CURLOPT_UNIX_SOCKET_PATH, " +
+      repr(request.unixSocket) +
+      ");\n";
+  }
+
   if (request.followRedirects) {
     phpCode += "curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);\n";
   }
@@ -205,7 +228,7 @@ export function _toPhp(requests: Request[], warnings: Warnings = []): string {
 
 export function toPhpWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const php = _toPhp(requests, warnings);

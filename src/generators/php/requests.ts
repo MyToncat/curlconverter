@@ -4,7 +4,7 @@ import { parseQueryString } from "../../Query.js";
 
 import { repr } from "./php.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   // "form",
   // "form-string",
@@ -12,7 +12,7 @@ const supportedArgs = new Set([
 
 export function _toPhpRequests(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
 
@@ -92,7 +92,7 @@ export function _toPhpRequests(
 }
 export function toPhpRequestsWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const php = _toPhpRequests(requests, warnings);

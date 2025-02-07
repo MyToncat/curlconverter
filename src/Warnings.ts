@@ -4,23 +4,16 @@ import type { Request } from "./Request.js";
 
 export type Warnings = [string, string][];
 
-export function warnf(global: GlobalConfig, warning: [string, string]) {
-  global.warnings.push(warning);
+export function warnf(global_: GlobalConfig, warning: [string, string]) {
+  global_.warnings.push(warning);
 }
 
-export function underlineNode(
-  node: Parser.SyntaxNode,
-  curlCommand?: string
+function underline(
+  node: Parser.SyntaxNode | Parser.TreeCursor,
+  startIndex: number,
+  endIndex: number,
+  curlCommand: string,
 ): string {
-  // doesn't include leading whitespace
-  const command = node.tree.rootNode;
-  let startIndex = node.startIndex;
-  let endIndex = node.endIndex;
-  if (!curlCommand) {
-    curlCommand = command.text;
-    startIndex -= command.startIndex;
-    endIndex -= command.startIndex;
-  }
   if (startIndex === endIndex) {
     endIndex++;
   }
@@ -47,9 +40,32 @@ export function underlineNode(
   return line + "\n" + underline;
 }
 
+export function underlineCursor(
+  node: Parser.TreeCursor,
+  curlCommand: string,
+): string {
+  return underline(node, node.startIndex, node.endIndex, curlCommand);
+}
+
+export function underlineNode(
+  node: Parser.SyntaxNode,
+  curlCommand?: string,
+): string {
+  // doesn't include leading whitespace
+  const command = node.tree.rootNode;
+  let startIndex = node.startIndex;
+  let endIndex = node.endIndex;
+  if (!curlCommand) {
+    curlCommand = command.text;
+    startIndex -= command.startIndex;
+    endIndex -= command.startIndex;
+  }
+  return underline(node, startIndex, endIndex, curlCommand);
+}
+
 export function underlineNodeEnd(
   node: Parser.SyntaxNode,
-  curlCommand?: string
+  curlCommand?: string,
 ): string {
   // doesn't include leading whitespace
   const command = node.tree.rootNode;
@@ -95,7 +111,7 @@ export interface Support {
 export function warnIfPartsIgnored(
   request: Request,
   warnings: Warnings,
-  support?: Support
+  support?: Support,
 ) {
   if (request.urls.length > 1 && !support?.multipleUrls) {
     warnings.push([

@@ -3,7 +3,7 @@ import { parse, getFirst, COMMON_SUPPORTED_ARGS } from "../parse.js";
 import type { Request, Warnings } from "../parse.js";
 import { parseQueryString } from "../Query.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "max-time",
   "connect-timeout",
@@ -14,19 +14,17 @@ const supportedArgs = new Set([
   "form-string",
 ]);
 
-// The only difference is that in Kotlin the $ needs to be escaped
+// The only difference from Java is that in Kotlin the $ needs to be escaped
 // https://kotlinlang.org/docs/java-to-kotlin-idioms-strings.html#concatenate-strings
 // https://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.10.6
 // https://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.3
-const regexEscape = /\$|"|\\|\p{C}|\p{Z}/gu;
+const regexEscape = /\$|"|\\|\p{C}|[^ \P{Z}]/gu;
 const regexDigit = /[0-9]/; // it's 0-7 actually but that would generate confusing code
 export function reprStr(s: string): string {
   return (
     '"' +
     s.replace(regexEscape, (c: string, index: number, string: string) => {
       switch (c) {
-        case " ":
-          return " ";
         case "$":
           return "\\$";
         case "\\":
@@ -85,7 +83,7 @@ export function repr(w: Word, imports: Set<string>): string {
 
 export function _toKotlin(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
   const url = request.urls[0];
@@ -103,7 +101,7 @@ export function _toKotlin(
   if (request.timeout) {
     // TODO: floats don't work here
     clientLines.push(
-      "  .callTimeout(" + request.timeout.toString() + ", TimeUnit.SECONDS)\n"
+      "  .callTimeout(" + request.timeout.toString() + ", TimeUnit.SECONDS)\n",
     );
     imports.add("java.util.concurrent.TimeUnit");
   }
@@ -111,7 +109,7 @@ export function _toKotlin(
     clientLines.push(
       "  .connectTimeout(" +
         request.connectTimeout.toString() +
-        ", TimeUnit.SECONDS)\n"
+        ", TimeUnit.SECONDS)\n",
     );
     imports.add("java.util.concurrent.TimeUnit");
   }
@@ -165,6 +163,32 @@ export function _toKotlin(
     kotlinCode += "val file = File(" + repr(url.uploadFile, imports) + ")\n\n";
     imports.add("java.io.File");
     imports.add("okhttp3.RequestBody.Companion.asRequestBody");
+  } else if (request.multipartUploads) {
+    methodCallArgs.push("requestBody");
+    kotlinCode += "val requestBody = MultipartBody.Builder()\n";
+    kotlinCode += "  .setType(MultipartBody.FORM)\n";
+    for (const m of request.multipartUploads) {
+      const args = [repr(m.name, imports)];
+      if ("content" in m) {
+        args.push(repr(m.content, imports));
+      } else {
+        if ("filename" in m && m.filename) {
+          args.push(repr(m.filename, imports));
+          args.push(
+            "File(" + repr(m.contentFile, imports) + ").asRequestBody()", // TODO: content type here
+          );
+          imports.add("java.io.File");
+          imports.add("okhttp3.RequestBody.Companion.asRequestBody");
+        } else {
+          // TODO: import
+          // TODO: probably doesn't work
+          args.push("Files.readAllBytes(" + repr(m.contentFile, imports) + ")");
+        }
+      }
+      kotlinCode += "  .addFormDataPart(" + args.join(", ") + ")\n";
+    }
+    kotlinCode += "  .build()\n\n";
+    imports.add("okhttp3.MultipartBody");
   } else if (
     request.dataArray &&
     request.dataArray.length === 1 &&
@@ -228,32 +252,6 @@ export function _toKotlin(
       kotlinCode += "val requestBody = " + repr(request.data, imports) + "\n\n";
       imports.add("okhttp3.RequestBody.Companion.toRequestBody");
     }
-  } else if (request.multipartUploads) {
-    methodCallArgs.push("requestBody");
-    kotlinCode += "val requestBody = MultipartBody.Builder()\n";
-    kotlinCode += "  .setType(MultipartBody.FORM)\n";
-    for (const m of request.multipartUploads) {
-      const args = [repr(m.name, imports)];
-      if ("content" in m) {
-        args.push(repr(m.content, imports));
-      } else {
-        if ("filename" in m && m.filename) {
-          args.push(repr(m.filename, imports));
-          args.push(
-            "File(" + repr(m.contentFile, imports) + ").asRequestBody()" // TODO: content type here
-          );
-          imports.add("java.io.File");
-          imports.add("okhttp3.RequestBody.Companion.asRequestBody");
-        } else {
-          // TODO: import
-          // TODO: probably doesn't work
-          args.push("Files.readAllBytes(" + repr(m.contentFile, imports) + ")");
-        }
-      }
-      kotlinCode += "  .addFormDataPart(" + args.join(", ") + ")\n";
-    }
-    kotlinCode += "  .build()\n\n";
-    imports.add("okhttp3.MultipartBody");
   }
 
   kotlinCode += "val request = Request.Builder()\n";
@@ -341,11 +339,11 @@ export function _toKotlin(
     preambleCode += "\n";
   }
 
-  return preambleCode + kotlinCode + "\n";
+  return preambleCode + kotlinCode;
 }
 export function toKotlinWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const kotlin = _toKotlin(requests, warnings);

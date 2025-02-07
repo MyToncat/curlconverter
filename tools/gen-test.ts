@@ -43,6 +43,14 @@ const argv = await yargs(hideBin(process.argv))
 const languages: Converter[] = Array.isArray(argv.language)
   ? argv.language
   : [argv.language];
+for (const language of languages) {
+  // Create the directory if it doesn't exist
+  const outDir = path.resolve(curlCommandDir, "..", language);
+  if (!fs.existsSync(outDir)) {
+    console.error("creating directory " + outDir);
+    fs.mkdirSync(outDir);
+  }
+}
 
 if (argv.all && argv._.length) {
   console.error("--all passed, ignoring names of test files");
@@ -99,11 +107,14 @@ for (const inPath of inPaths) {
       continue;
     }
 
+    const orig = fs.existsSync(outPath) ? fs.readFileSync(outPath, "utf8") : "";
     fs.writeFileSync(outPath, code);
-    if (printEachFile) {
-      console.error("wrote to " + path.relative(fixturesDir, outPath));
-    } else {
-      total += 1;
+    if (orig !== code) {
+      if (printEachFile) {
+        console.error("wrote to " + path.relative(fixturesDir, outPath));
+      } else {
+        total += 1;
+      }
     }
   }
 }

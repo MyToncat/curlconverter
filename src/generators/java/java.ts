@@ -2,7 +2,7 @@ import { Word, eq } from "../../shell/Word.js";
 import { parse, getFirst, COMMON_SUPPORTED_ARGS } from "../../parse.js";
 import type { Request, Warnings } from "../../parse.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "max-time",
   "connect-timeout",
@@ -18,15 +18,13 @@ const supportedArgs = new Set([
 // https://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.10.6
 // https://docs.oracle.com/javase/specs/jls/se7/html/jls-3.html#jls-3.3
 // Also used for Clojure
-const regexEscape = /"|\\|\p{C}|\p{Z}/gu;
+const regexEscape = /"|\\|\p{C}|[^ \P{Z}]/gu;
 const regexDigit = /[0-9]/; // it's 0-7 actually but that would generate confusing code
 export function reprStr(s: string): string {
   return (
     '"' +
     s.replace(regexEscape, (c: string, index: number, string: string) => {
       switch (c) {
-        case " ":
-          return " ";
         case "\\":
           return "\\\\";
         case "\b":
@@ -109,7 +107,7 @@ export function _toJava(requests: Request[], warnings: Warnings = []): string {
     clientLines.push(
       "    .connectTimeout(Duration.ofSeconds(" +
         request.connectTimeout.toString() +
-        "))\n"
+        "))\n",
     );
     imports.add("java.time.Duration");
   }
@@ -132,7 +130,7 @@ export function _toJava(requests: Request[], warnings: Warnings = []): string {
       warnings.push(["upload-stdin", "uploading from stdin isn't supported"]);
     }
     methodCallArgs.push(
-      "BodyPublishers.ofFile(Paths.get(" + repr(url.uploadFile, imports) + "))"
+      "BodyPublishers.ofFile(Paths.get(" + repr(url.uploadFile, imports) + "))",
     );
     imports.add("java.net.http.HttpRequest.BodyPublishers");
     imports.add("java.nio.file.Paths");
@@ -147,13 +145,13 @@ export function _toJava(requests: Request[], warnings: Warnings = []): string {
     methodCallArgs.push(
       "BodyPublishers.ofFile(Paths.get(" +
         repr(request.dataArray[0].filename, imports) +
-        "))"
+        "))",
     );
     imports.add("java.net.http.HttpRequest.BodyPublishers");
     imports.add("java.nio.file.Paths");
   } else if (request.data) {
     methodCallArgs.push(
-      "BodyPublishers.ofString(" + repr(request.data, imports) + ")"
+      "BodyPublishers.ofString(" + repr(request.data, imports) + ")",
     );
     imports.add("java.net.http.HttpRequest.BodyPublishers");
   }
@@ -270,7 +268,7 @@ export function _toJava(requests: Request[], warnings: Warnings = []): string {
 }
 export function toJavaWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const java = _toJava(requests, warnings);

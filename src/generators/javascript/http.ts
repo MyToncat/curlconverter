@@ -7,15 +7,14 @@ import {
   repr,
   reprObj,
   asParseFloatTimes1000,
+  toURLSearchParams,
   type JSImports,
   reprImports,
-  reprAsStringToStringDict,
-  reprAsStringTuples,
 } from "./javascript.js";
 
 import { dedent, getFormString } from "./jquery.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -26,7 +25,7 @@ const supportedArgs = new Set([
 function _getDataString(
   data: Word,
   contentType: string | null | undefined,
-  imports: JSImports
+  imports: JSImports,
 ): [string, string | null] {
   const originalStringRepr = repr(data, imports);
 
@@ -42,19 +41,15 @@ function _getDataString(
     return [jsonAsJavaScript, roundtrips ? null : originalStringRepr];
   }
   if (contentType === "application/x-www-form-urlencoded") {
-    const [queryList, queryDict] = parseQueryString(data);
-    if (queryList) {
+    const query = parseQueryString(data);
+    if (query[0]) {
       // if (
       //   eq(exactContentType, "application/x-www-form-urlencoded; charset=utf-8")
       // ) {
       //   exactContentType = null;
       // }
-      const queryObj =
-        queryDict && queryDict.every((q) => !Array.isArray(q[1]))
-          ? reprAsStringToStringDict(queryDict as [Word, Word][], 1, imports)
-          : reprAsStringTuples(queryList, 1, imports);
       // TODO: check roundtrip, add a comment
-      return ["new URLSearchParams(" + queryObj + ").toString()", null];
+      return [toURLSearchParams(query, imports) + ".toString()", null];
     }
   }
   return [originalStringRepr, null];
@@ -63,7 +58,7 @@ function _getDataString(
 export function getDataString(
   data: Word,
   contentType: string | null | undefined,
-  imports: JSImports
+  imports: JSImports,
 ): [string, string | null] {
   let dataString: string | null = null;
   let commentedOutDataString: string | null = null;
@@ -71,7 +66,7 @@ export function getDataString(
     [dataString, commentedOutDataString] = _getDataString(
       data,
       contentType,
-      imports
+      imports,
     );
   } catch {}
   if (!dataString) {
@@ -82,7 +77,7 @@ export function getDataString(
 
 export function _toNodeHttp(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
   const imports: JSImports = [];
@@ -109,17 +104,17 @@ export function _toNodeHttp(
   let dataString, commentedOutDataString;
   let formString;
   const contentType = request.headers.getContentType();
-  if (request.data) {
-    [dataString, commentedOutDataString] = getDataString(
-      request.data,
-      contentType,
-      imports
-    );
-  } else if (request.multipartUploads) {
+  if (request.multipartUploads) {
     formString = getFormString(request.multipartUploads, imports);
     code += formString;
     // Node 18's native FormData doesn't have .pipe() or .getHeaders()
     importCode += "import FormData from 'form-data';\n";
+  } else if (request.data) {
+    [dataString, commentedOutDataString] = getDataString(
+      request.data,
+      contentType,
+      imports,
+    );
   }
 
   if (request.urls[0].auth) {
@@ -174,7 +169,7 @@ export function _toNodeHttp(
         "Parsing the port out of the hostname is not supported. If you get an ENOTFOUND error, you'll need to do it manually",
       ]);
     }
-    const path = mergeWords([urlObj.path, urlObj.query]);
+    const path = mergeWords(urlObj.path, urlObj.query);
     if (path.toBool()) {
       code += "  path: " + repr(path, imports) + ",\n";
     }
@@ -226,7 +221,7 @@ export function _toNodeHttp(
 
 export function toNodeHttpWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const code = _toNodeHttp(requests, warnings);

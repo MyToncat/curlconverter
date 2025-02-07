@@ -3,9 +3,9 @@ import { Word } from "../shell/Word.js";
 import { parse, getFirst, COMMON_SUPPORTED_ARGS } from "../parse.js";
 import type { Request, Warnings } from "../parse.js";
 
-import { reprStr as pyreprStr } from "./python.js";
+import { reprStr as pyreprStr } from "./python/python.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "insecure",
   "no-insecure",
@@ -101,11 +101,11 @@ export function _toGo(requests: Request[], warnings: Warnings = []): string {
         goCode += `\tfw, err ${op} writer.CreateFormFile(${repr(
           m.name,
           vars,
-          imports
+          imports,
         )}, filepath.Base(${repr(
           m.filename ?? m.contentFile,
           vars,
-          imports
+          imports,
         )}))\n`;
         goCode += IF_ERR;
         imports.add("path/filepath");
@@ -113,7 +113,7 @@ export function _toGo(requests: Request[], warnings: Warnings = []): string {
         goCode += `\tfd, err ${op} os.Open(${repr(
           m.contentFile,
           vars,
-          imports
+          imports,
         )})\n`;
         goCode += IF_ERR;
         imports.add("os");
@@ -126,13 +126,13 @@ export function _toGo(requests: Request[], warnings: Warnings = []): string {
         goCode += `\tformField, err ${op} writer.CreateFormField(${repr(
           m.name,
           vars,
-          imports
+          imports,
         )})\n`;
         goCode += IF_ERR;
         goCode += `\t_, err = formField.Write([]byte(${reprMaybeBacktick(
           m.content,
           vars,
-          imports
+          imports,
         )}))\n`;
       }
       goCode += "\n";
@@ -172,7 +172,7 @@ export function _toGo(requests: Request[], warnings: Warnings = []): string {
   }
   goCode += "}\n";
 
-  if (request.data) {
+  if (request.data && !request.multipartUploads) {
     goCode +=
       "\tvar data = strings.NewReader(" +
       reprBacktick(request.data, vars, imports) +
@@ -187,7 +187,7 @@ export function _toGo(requests: Request[], warnings: Warnings = []): string {
     repr(request.urls[0].url, vars, imports);
   goCode +=
     ", " +
-    (request.data ? "data" : request.multipartUploads ? "form" : "nil") +
+    (request.multipartUploads ? "form" : request.data ? "data" : "nil") +
     ")\n";
   goCode += IF_ERR;
 
@@ -258,7 +258,7 @@ export function _toGo(requests: Request[], warnings: Warnings = []): string {
 }
 export function toGoWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const go = _toGo(requests, warnings);

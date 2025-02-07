@@ -3,13 +3,13 @@ import { Word } from "../shell/Word.js";
 import { parse, getFirst, COMMON_SUPPORTED_ARGS } from "../parse.js";
 import type { Request, Warnings } from "../parse.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
 
   "http0.9",
-  // "http1.0",
+  "http1.0",
   "http1.1",
   "http2",
   "http2-prior-knowledge",
@@ -38,11 +38,15 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
   }
   s += url + " ";
 
-  // TODO
-  if (request.http3) {
+  if (request.httpVersion === "3" || request.httpVersion === "3-only") {
     s += "HTTP/3";
-  } else if (request.http2) {
+  } else if (
+    request.httpVersion === "2" ||
+    request.httpVersion === "2-prior-knowledge"
+  ) {
     s += "HTTP/2";
+  } else if (request.httpVersion === "1.0") {
+    s += "HTTP/1.0";
   } else {
     s += "HTTP/1.1";
   }
@@ -54,7 +58,7 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
     if (request.authType === "basic") {
       request.headers.prependIfMissing(
         "Authorization",
-        "Basic " + btoa(user.toString() + ":" + pass.toString())
+        "Basic " + btoa(user.toString() + ":" + pass.toString()),
       );
     }
   }
@@ -66,7 +70,7 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
   }
   request.headers.prependIfMissing("Accept", "*/*");
   // TODO: update version with extract_curl_args.py
-  request.headers.prependIfMissing("User-Agent", "curl/8.0.1");
+  request.headers.prependIfMissing("User-Agent", "curl/8.2.1");
   request.headers.prependIfMissing("Host", urlObj.host.toString());
 
   // Generate a random boundary, just like curl
@@ -75,7 +79,7 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
   let boundary =
     "------------------------" +
     Array.from({ length: 16 }, () =>
-      "0123456789abcdef".charAt(Math.floor(Math.random() * 16))
+      "0123456789abcdef".charAt(Math.floor(Math.random() * 16)),
     ).join("");
   // crypto.getRandomValues() only available on Node 19+
   // Array.from(crypto.getRandomValues(new Uint8Array(8)))
@@ -86,14 +90,14 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
     // TODO: we already added Content-Type earlier but curl puts Content-Type after Content-Length
     request.headers.setIfMissing(
       "Content-Length",
-      request.data.toString().length.toString()
+      request.data.toString().length.toString(),
     );
   } else if (request.urls[0].uploadFile) {
     const contentLength =
       "<length of " + request.urls[0].uploadFile.toString() + ">";
     const wasMissing = request.headers.setIfMissing(
       "Content-Length",
-      contentLength
+      contentLength,
     );
     if (wasMissing) {
       warnings.push([
@@ -120,7 +124,7 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
       // TODO: could existing Content-Type have other stuff that needs to be preserved?
       request.headers.set(
         "Content-Type",
-        "multipart/form-data; boundary=" + boundary
+        "multipart/form-data; boundary=" + boundary,
       );
     }
   }
@@ -152,20 +156,22 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
   } else if (request.multipartUploads) {
     for (const f of request.multipartUploads) {
       s += "--" + boundary + "\n";
+
       s += "Content-Disposition: form-data";
       s += '; name="' + f.name.toString() + '"';
+      if (f.filename) {
+        s += '; filename="' + f.filename.toString() + '"';
+      }
+      if (f.contentType) {
+        s += '\nContent-Type: "' + f.contentType.toString() + '"';
+      }
+      // TODO: ; headers=
+
+      s += "\n\n";
       if ("content" in f) {
-        s += "\n\n";
-        const content = f.content.toString();
-        if (content) {
-          s += content + "\n";
-        }
+        s += f.content.toString();
       } else {
-        if (f.filename) {
-          s += '; filename="' + f.filename.toString() + '"';
-        }
-        // TODO: set content type from file extension
-        s += "\n\n" + f.contentFile.toString() + "\n";
+        s += f.contentFile.toString();
       }
       s += "\n";
     }
@@ -177,7 +183,7 @@ export function _toHTTP(requests: Request[], warnings: Warnings = []): string {
 
 export function toHTTPWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const http = _toHTTP(requests, warnings);

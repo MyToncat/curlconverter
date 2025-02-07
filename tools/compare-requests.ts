@@ -60,7 +60,7 @@ const executables = {
       fs.writeFileSync(
         "/tmp/curlconverter/httpie/main",
         contents.trimEnd() + " --ignore-stdin" + "\n",
-        "utf8"
+        "utf8",
       );
     },
     exec: "chmod +x /tmp/curlconverter/httpie/main && /tmp/curlconverter/httpie/main",
@@ -80,7 +80,7 @@ const executables = {
           "\n" +
           "  }\n" +
           "}\n",
-        "utf8"
+        "utf8",
       );
     },
     exec: "cd /tmp/curlconverter/java && javac Main.java && java Main",
@@ -122,7 +122,7 @@ const executables = {
         "/tmp/curlconverter/java-jsoup/src/main/java/com/mycompany/app/Main.java",
         `package com.mycompany.app;\n\n` +
           contents.replace("class Main", "public class Main"),
-        "utf8"
+        "utf8",
       );
     },
     exec: "cd /tmp/curlconverter/java-jsoup && mvn compile && mvn exec:java -Dexec.mainClass=com.mycompany.app.Main",
@@ -146,7 +146,7 @@ import jQueryInit from 'jquery';
 var $ = jQueryInit(window);
 
 ` + contents,
-        "utf8"
+        "utf8",
       );
     },
     exec: "cd /tmp/curlconverter/javascript-jquery && node main.js",
@@ -158,20 +158,26 @@ var $ = jQueryInit(window);
       fs.writeFileSync(
         "/tmp/curlconverter/javascript-xhr/main.js",
         "import { XMLHttpRequest } from 'xmlhttprequest';\n\n" + contents,
-        "utf8"
+        "utf8",
       );
     },
     exec: "cd /tmp/curlconverter/javascript-xhr && node main.js",
+  },
+  julia: {
+    exec: "julia <file>",
   },
   kotlin: {
     copy: function (contents: string) {
       fs.writeFileSync(
         "/tmp/curlconverter/kotlin/script.main.kts",
         '@file:DependsOn("com.squareup.okhttp3:okhttp:4.11.0")\n\n' + contents,
-        "utf8"
+        "utf8",
       );
     },
     exec: "cd /tmp/curlconverter/kotlin && kotlin script.main.kts",
+  },
+  lua: {
+    exec: "lua <file>",
   },
   node: {
     setup:
@@ -193,9 +199,9 @@ var $ = jQueryInit(window);
         "/tmp/curlconverter/node-http/main.js",
         contents.replace(
           "hostname: 'localhost:28139',",
-          "hostname: 'localhost', port: 28139,"
+          "hostname: 'localhost', port: 28139,",
         ),
-        "utf8"
+        "utf8",
       );
     },
     exec: "cd /tmp/curlconverter/node-http && node main.js",
@@ -205,6 +211,63 @@ var $ = jQueryInit(window);
       "cd /tmp && mkdir -p curlconverter/node-superagent && cd curlconverter/node-superagent && npm init -y es6 && npm install superagent",
     copy: "cp <file> /tmp/curlconverter/node-superagent/main.js",
     exec: "cd /tmp/curlconverter/node-superagent && node main.js",
+  },
+  objectivec: {
+    copy: function (contents: string) {
+      fs.writeFileSync(
+        "/tmp/curlconverter/objectivec/main.m",
+        contents
+          .replace(
+            "#import <Foundation/Foundation.h>\n",
+            "#import <Foundation/Foundation.h>\n" +
+              "\n" +
+              "int main(int argc, const char * argv[]) {\n" +
+              "    @autoreleasepool {\n",
+          )
+          .replace(
+            "NSURLSession *session = ",
+            "\ndispatch_semaphore_t semaphore = dispatch_semaphore_create(0);\nNSURLSession *session = ",
+          )
+          .replace(
+            '        NSLog(@"%@", httpResponse);\n' + "    }\n",
+            '        NSLog(@"%@", httpResponse);\n' +
+              "    }\n" +
+              "dispatch_semaphore_signal(semaphore);\n",
+          ) +
+          "dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);\n" +
+          "    }\n" +
+          "    return 0;\n" +
+          "}\n",
+        "utf8",
+      );
+    },
+    exec: "cd /tmp/curlconverter/objectivec && clang -framework Foundation main.m -o main && ./main",
+  },
+  ocaml: {
+    copy: function (contents: string) {
+      fs.writeFileSync(
+        "/tmp/curlconverter/ocaml/main.ml",
+        contents
+          .replace(
+            "\nlet uri = Uri.of_string ",
+            "let body =\nlet uri = Uri.of_string ",
+          )
+          .replace(
+            "  (* Do stuff with the result *)\n",
+            "  body |> Cohttp_lwt.Body.to_string\n" +
+              "\n" +
+              "" +
+              "let () =\n" +
+              "  let body = Lwt_main.run body in\n" +
+              "  print_endline body\n",
+          ),
+        "utf8",
+      );
+    },
+    exec: "cd /tmp/curlconverter/ocaml && eval `opam config env` && ocamlbuild -use-ocamlfind -tag thread -pkg cohttp-lwt-unix main.native && ./main.native",
+  },
+  perl: {
+    exec: "perl <file>",
   },
   php: {
     exec: "php <file>",
@@ -226,7 +289,13 @@ var $ = jQueryInit(window);
   r: {
     exec: "r < <file> --no-save",
   },
+  "r-httr2": {
+    exec: "r < <file> --no-save",
+  },
   ruby: {
+    exec: "ruby <file>",
+  },
+  "ruby-httparty": {
     exec: "ruby <file>",
   },
   rust: {
@@ -234,6 +303,31 @@ var $ = jQueryInit(window);
       "cd /tmp && cargo init --vcs none /tmp/curlconverter/rust && cd /tmp/curlconverter/rust && cargo add reqwest --features reqwest/blocking,reqwest/json",
     copy: "cp <file> /tmp/curlconverter/rust/src/main.rs",
     exec: "cd /tmp/curlconverter/rust && cargo run",
+  },
+  swift: {
+    copy: function (contents: string) {
+      fs.writeFileSync(
+        "/tmp/curlconverter/swift/main.swift",
+        contents
+          .replace(
+            "import Foundation\n",
+            "import Foundation\n\n// testing\nlet group = DispatchGroup()\ngroup.enter()\n",
+          )
+          .replace(
+            'print(str ?? "")\n    }\n',
+            'print(str ?? "")\n    }\n\n    // testing\n    group.leave()\n',
+          ) +
+          `
+// testing
+group.notify(queue: .main) {
+  exit(EXIT_SUCCESS) // Exit program when done
+}
+dispatchMain()\n`,
+
+        "utf8",
+      );
+    },
+    exec: "cd /tmp/curlconverter/swift && swift main.swift",
   },
   wget: {
     exec: "bash <file>",
@@ -273,7 +367,7 @@ const languages: (keyof typeof executables)[] = Array.isArray(argv.language)
 
 const testFile = async (
   testFilename: string,
-  languages: (keyof typeof executables)[]
+  languages: (keyof typeof executables)[],
 ): Promise<void> => {
   const rawRequests: string[] = [];
 
@@ -321,7 +415,7 @@ const testFile = async (
   const inputFile = path.join(
     fixturesDir,
     "curl_commands",
-    testFilename + ".sh"
+    testFilename + ".sh",
   );
   if (!fs.existsSync(inputFile)) {
     server.close();
@@ -345,7 +439,7 @@ const testFile = async (
   } catch (e) {}
 
   const files = languages.map((l: keyof typeof executables) =>
-    path.join(fixturesDir, l, testFilename + converters[l].extension)
+    path.join(fixturesDir, l, testFilename + converters[l].extension),
   );
   for (let i = 0; i < languages.length; i++) {
     const language = languages[i];
@@ -370,7 +464,7 @@ const testFile = async (
       }
     } else {
       console.error(
-        language + " file doesn't exist, skipping: " + languageFile
+        language + " file doesn't exist, skipping: " + languageFile,
       );
     }
   }
@@ -433,8 +527,8 @@ if (!tests.length) {
           path.join(
             fixturesDir,
             l,
-            testFile.replace(".sh", converters[l].extension)
-          )
+            testFile.replace(".sh", converters[l].extension),
+          ),
         )
       ) {
         tests.push(testFile);

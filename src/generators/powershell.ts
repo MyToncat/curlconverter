@@ -7,14 +7,12 @@ import { parseQueryString } from "../Query.js";
 // https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_quoting_rules
 // https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_special_characters
 // https://learn.microsoft.com/en-us/powershell/scripting/learn/deep-dives/everything-about-string-substitutions
-const unprintableChars = /(?! )(\p{C}|\p{Z})/gu;
-const regexDoubleEscape = /\$|`|"|\p{C}|\p{Z}/gu;
+const unprintableChars = /\p{C}|[^ \P{Z}]/gu;
+const regexDoubleEscape = /\$|`|"|\p{C}|[^ \P{Z}]/gu;
 export function escapeStr(s: string, quote: '"' | "'"): string {
   if (quote === '"') {
     return s.replace(regexDoubleEscape, (c: string) => {
       switch (c) {
-        case " ":
-          return " ";
         case "\x00":
           return "`0";
         case "\x07":
@@ -84,7 +82,7 @@ export function repr(w: Word): string {
   return quote + args.join("") + quote;
 }
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -111,7 +109,7 @@ function requestToPowershell(
   request: Request,
   url: RequestUrl,
   restMethod: boolean,
-  warnings: Warnings
+  warnings: Warnings,
 ): string {
   let code = "";
   const command = restMethod ? "Invoke-RestMethod" : "Invoke-WebRequest";
@@ -228,6 +226,24 @@ function requestToPowershell(
       // ]);
     }
     args.push(["-InFile", repr(url.uploadFile)]);
+  } else if (request.multipartUploads) {
+    code += "$form = @{\n";
+    for (const m of request.multipartUploads) {
+      if ("content" in m) {
+        code += "    " + repr(m.name) + " = " + repr(m.content) + "\n";
+      } else {
+        if ("filename" in m && m.filename && !eq(m.filename, m.contentFile)) {
+          warnings.push([
+            "powershell-multipart-fake-filename",
+            "PowerShell doesn't support multipart uploads that read a certain filename but send a different filename",
+          ]);
+        }
+        code +=
+          "    " + repr(m.name) + " = Get-Item " + repr(m.contentFile) + "\n";
+      }
+    }
+    code += "}\n";
+    args.push(["-Form", "$form"]);
   } else if (
     request.dataArray &&
     request.dataArray.length === 1 &&
@@ -257,20 +273,21 @@ function requestToPowershell(
         args.push(["-Body", "$body"]);
       } else {
         args.push(["-Body", repr(request.data)]);
-        if (methodStr === "POST") {
+        if (methodStr === "POST" && request.data.includes("=")) {
           warnings.push([
             "post-string",
-            "all text after the first '=' will be escaped",
+            "all -Body text after the first '=' will be escaped",
           ]);
         }
       }
     } else {
       // TODO: values require escaping
       args.push(["-Body", repr(request.data)]);
-      if (methodStr === "POST") {
+
+      if (methodStr === "POST" && request.data.includes("=")) {
         warnings.push([
           "post-string",
-          "all text after the first '=' will be escaped",
+          "all -Body text after the first '=' will be escaped",
         ]);
       }
     }
@@ -280,24 +297,6 @@ function requestToPowershell(
         "the -Body will be sent in the URL as a query string",
       ]);
     }
-  } else if (request.multipartUploads) {
-    code += "$form = @{\n";
-    for (const m of request.multipartUploads) {
-      if ("content" in m) {
-        code += "    " + repr(m.name) + " = " + repr(m.content) + "\n";
-      } else {
-        if ("filename" in m && m.filename && !eq(m.filename, m.contentFile)) {
-          warnings.push([
-            "powershell-multipart-fake-filename",
-            "PowerShell doesn't support multipart uploads that read a certain filename but send a different filename",
-          ]);
-        }
-        code +=
-          "    " + repr(m.name) + " = Get-Item " + repr(m.contentFile) + "\n";
-      }
-    }
-    code += "}\n";
-    args.push(["-Form", "$form"]);
   }
 
   if (request.followRedirects === false) {
@@ -358,7 +357,7 @@ function requestToPowershell(
 function toPowershell(
   requests: Request[],
   restMethod = true,
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const commands = [];
 
@@ -394,14 +393,14 @@ function toPowershell(
 
 export function _toPowershellWebRequest(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
-  return toPowershell(requests, true, warnings);
+  return toPowershell(requests, false, warnings);
 }
 
 export function toPowershellWebRequestWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const code = _toPowershellWebRequest(requests, warnings);
@@ -413,14 +412,14 @@ export function toPowershellWebRequest(curlCommand: string | string[]): string {
 
 export function _toPowershellRestMethod(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
-  return toPowershell(requests, false, warnings);
+  return toPowershell(requests, true, warnings);
 }
 
 export function toPowershellRestMethodWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const code = _toPowershellRestMethod(requests, warnings);

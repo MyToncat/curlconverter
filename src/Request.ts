@@ -79,31 +79,58 @@ export interface RequestUrl {
   // authType?: string;
 }
 
+export type ProxyType =
+  | "http1"
+  | "http2"
+  | "socks4"
+  | "socks4a"
+  | "socks5"
+  | "socks5-hostname";
+
 export interface Request {
   // Will have at least one element (otherwise an error is raised)
   urls: RequestUrl[];
   globoff?: boolean;
+  disallowUsernameInUrl?: boolean;
+  pathAsIs?: boolean;
 
   // Just the part that comes from `--get --data` or `--url-query` (not the query in the URL)
   // unless there's only one URL, then it will include both.
   queryArray?: DataParam[];
 
   authType: AuthType;
+  proxyAuthType: AuthType;
   awsSigV4?: Word;
+  oauth2Bearer?: Word;
   delegation?: Word;
+  krb?: Word;
+  saslAuthzid?: Word;
+  saslIr?: boolean;
+  serviceName?: Word;
 
   // A null header means the command explicitly disabled sending this header
   headers: Headers;
+  proxyHeaders: Headers;
+  refererAuto?: boolean;
 
   // .cookies is a parsed version of the Cookie header, if it can be parsed.
   // Generators that use .cookies need to delete the header from .headers (usually).
   cookies?: Cookies;
   cookieFiles?: Word[];
   cookieJar?: Word;
+  junkSessionCookies?: boolean;
 
   compressed?: boolean;
+  transferEncoding?: boolean;
+
+  include?: boolean;
 
   multipartUploads?: FormParam[];
+  // When multipartUploads comes from parsing a string in --data
+  // this can be set to true to say that sending the original data
+  // as a string would be more correct.
+  multipartUploadsDoesntRoundtrip?: boolean;
+  formEscape?: boolean;
 
   dataArray?: DataParam[];
   data?: Word;
@@ -114,43 +141,154 @@ export interface Request {
   ipv4?: boolean;
   ipv6?: boolean;
 
+  proto?: Word;
+  protoRedir?: Word;
+  protoDefault?: Word;
+
+  tcpFastopen?: boolean;
+
+  localPort?: [Word, Word | null];
+
+  ignoreContentLength?: boolean;
+
+  interface?: Word;
+
   ciphers?: Word;
+  curves?: Word;
   insecure?: boolean;
+  certStatus?: boolean;
   cert?: [Word, Word | null];
   certType?: Word;
   key?: Word;
   keyType?: Word;
+  pass?: Word;
   cacert?: Word;
+  caNative?: boolean;
+  sslAllowBeast?: boolean;
   capath?: Word;
   crlfile?: Word;
   pinnedpubkey?: Word;
   randomFile?: Word;
   egdFile?: Word;
   hsts?: Word[]; // a filename
+  alpn?: boolean;
+
+  tlsVersion?: "1" | "1.0" | "1.1" | "1.2" | "1.3";
+  tlsMax?: Word;
+  tls13Ciphers?: Word;
+  tlsauthtype?: Word;
+  tlspassword?: Word;
+  tlsuser?: Word;
+  sslAutoClientCert?: boolean;
+  sslNoRevoke?: boolean;
+  sslReqd?: boolean;
+  sslRevokeBestEffort?: boolean;
+  ssl?: boolean;
+  sslv2?: boolean;
+  sslv3?: boolean;
+
+  dohUrl?: Word;
+  dohInsecure?: boolean;
+  dohCertStatus?: boolean;
 
   proxy?: Word;
+  proxyType?: ProxyType;
   proxyAuth?: Word;
+  proxytunnel?: boolean;
   noproxy?: Word; // a list of hosts or "*"
+  preproxy?: Word;
+  proxyAnyauth?: boolean;
+  proxyBasic?: boolean;
+  proxyCaNative?: boolean;
+  proxyCacert?: Word; // <file>
+  proxyCapath?: Word; // <dir>
+  proxyCertType?: Word; // <type>
+  proxyCert?: Word; // <cert[:passwd]>
+  proxyCiphers?: Word; // <list>
+  proxyCrlfile?: Word; // <file>
+  proxyDigest?: boolean;
+  proxyHttp2?: boolean;
+  proxyInsecure?: boolean;
+  proxyKeyType?: Word; // <type>
+  proxyKey?: Word; // <key>
+  proxyNegotiate?: boolean;
+  proxyNtlm?: boolean;
+  proxyPass?: Word; // <phrase>
+  proxyPinnedpubkey?: Word; // <hashes>
+  proxyServiceName?: Word; // <name>
+  proxySslAllowBeast?: boolean;
+  proxySslAutoClientCert?: boolean;
+  proxyTls13Ciphers?: Word; // <ciphersuite list>
+  proxyTlsauthtype?: Word; // <type>
+  proxyTlspassword?: Word; // <string>
+  proxyTlsuser?: Word; // <name>
+  proxyTlsv1?: boolean;
+  proxyUser?: Word; // <user:password>
+  proxy1?: boolean; // <host[:port]>
 
-  // seconds, can have decimal
-  timeout?: Word;
-  connectTimeout?: Word;
-  limitRate?: Word;
+  socks4?: Word;
+  socks4a?: Word;
+  socks5?: Word;
+  socks5Basic?: boolean;
+  socks5GssapiNec?: boolean;
+  socks5GssapiService?: Word;
+  socks5Gssapi?: boolean;
+  socks5Hostname?: Word;
+
+  haproxyClientIp?: Word;
+  haproxyProtocol?: boolean;
+
+  timeout?: Word; // a decimal, seconds
+  connectTimeout?: Word; // a decimal, seconds
+  expect100Timeout?: Word; // a decimal, seconds
+  happyEyeballsTimeoutMs?: Word; // an integer, milliseconds
+  speedLimit?: Word; // an integer
+  speedTime?: Word; // an integer
+  limitRate?: Word; // an integer with an optional unit
+  maxFilesize?: Word; // an intger with an optional unit
+
+  continueAt?: Word; // an integer or "-"
+
+  crlf?: boolean;
+  useAscii?: boolean;
+
+  remoteTime?: boolean;
+
+  clobber?: boolean;
+
+  ftpSkipPasvIp?: boolean;
+
+  fail?: boolean;
+  retry?: Word; // an integer, how many times to retry
+  retryMaxTime?: Word; // an integer, seconds
 
   keepAlive?: boolean;
+  keepAliveTime?: Word; // an integer, seconds
+
+  altSvc?: Word;
 
   followRedirects?: boolean;
   followRedirectsTrusted?: boolean;
-  maxRedirects?: Word;
+  maxRedirects?: Word; // an integer
+  post301?: boolean;
+  post302?: boolean;
+  post303?: boolean;
 
+  httpVersion?: "1.0" | "1.1" | "2" | "2-prior-knowledge" | "3" | "3-only";
+  http0_9?: boolean;
   http2?: boolean;
   http3?: boolean;
 
   stdin?: Word;
   stdinFile?: Word;
 
+  resolve?: Word[]; // a list of host:port:address
+  connectTo?: Word[]; // a list of host:port:connect-to-host:connect-to-port
+
   unixSocket?: Word;
+  abstractUnixSocket?: Word;
   netrc?: "optional" | "required" | "ignored"; // undefined means implicitly "ignored"
+  netrcFile?: Word; // if undefined defaults to ~/.netrc
 
   // Global options
   verbose?: boolean;
@@ -158,16 +296,16 @@ export interface Request {
 }
 
 function buildURL(
-  global: GlobalConfig,
+  global_: GlobalConfig,
   config: OperationConfig,
   url: Word,
   uploadFile?: Word,
   outputFile?: Word,
   stdin?: Word,
-  stdinFile?: Word
+  stdinFile?: Word,
 ): RequestUrl {
   const originalUrl = url;
-  const u = parseurl(global, config, url);
+  const u = parseurl(global_, config, url);
 
   // https://github.com/curl/curl/blob/curl-7_85_0/src/tool_operate.c#L1124
   // https://github.com/curl/curl/blob/curl-7_85_0/src/tool_operhlp.c#L76
@@ -180,21 +318,21 @@ function buildURL(
     }
 
     if (config.get) {
-      warnf(global, [
+      warnf(global_, [
         "data-ignored",
         "curl doesn't let you pass --get and --upload-file together",
       ]);
     }
   }
 
-  const urlWithOriginalQuery = mergeWords([
+  const urlWithOriginalQuery = mergeWords(
     u.scheme,
     "://",
     u.host,
     u.path,
     u.query,
     u.fragment,
-  ]);
+  );
 
   // curl example.com example.com?foo=bar --url-query isshared=t
   // will make requests for
@@ -245,7 +383,7 @@ function buildURL(
       [queryArray, queryStr, queryStrReadsFile] = buildData(
         queryParts,
         stdin,
-        stdinFile
+        stdinFile,
       );
       urlQueryArray = queryArray;
     }
@@ -254,7 +392,7 @@ function buildURL(
       [queryArray, queryStr, queryStrReadsFile] = buildData(
         queryParts,
         stdin,
-        stdinFile
+        stdinFile,
       );
     }
 
@@ -269,28 +407,28 @@ function buildURL(
       u.query = queryStr.prepend("?");
     }
   }
-  const urlWithoutQueryArray = mergeWords([
+  const urlWithoutQueryArray = mergeWords(
     u.scheme,
     "://",
     u.host,
     u.path,
     u.fragment,
-  ]);
-  url = mergeWords([u.scheme, "://", u.host, u.path, u.query, u.fragment]);
+  );
+  url = mergeWords(u.scheme, "://", u.host, u.path, u.query, u.fragment);
   let urlWithoutQueryList = url;
   // TODO: parseQueryString() doesn't accept leading '?'
   let [queryList, queryDict] = parseQueryString(
-    u.query.toBool() ? u.query.slice(1) : new Word()
+    u.query.toBool() ? u.query.slice(1) : new Word(),
   );
   if (queryList && queryList.length) {
     // TODO: remove the fragment too?
-    urlWithoutQueryList = mergeWords([
+    urlWithoutQueryList = mergeWords(
       u.scheme,
       "://",
       u.host,
       u.path,
       u.fragment,
-    ]);
+    );
   } else {
     queryList = null;
     queryDict = null;
@@ -350,7 +488,7 @@ function buildURL(
       if (stdinFile) {
         requestUrl.uploadFile = stdinFile;
       } else if (stdin) {
-        warnf(global, [
+        warnf(global_, [
           "upload-file-with-stdin-content",
           "--upload-file with stdin content is not supported",
         ]);
@@ -362,7 +500,7 @@ function buildURL(
         // if (config.url && config.url.length === 1) {
         //   config.data = [["raw", stdin]];
         // } else {
-        //   warnf(global, [
+        //   warnf(global_, [
         //     "upload-file-with-stdin-content-and-multiple-urls",
         //     "--upload-file with stdin content and multiple URLs is not supported",
         //   ]);
@@ -392,7 +530,7 @@ function buildURL(
 function buildData(
   configData: SrcDataParam[],
   stdin?: Word,
-  stdinFile?: Word
+  stdinFile?: Word,
 ): [DataParam[], Word, string | null] {
   const data: DataParam[] = [];
   let dataStrState = new Word();
@@ -439,10 +577,10 @@ function buildData(
               value = stdin;
               break;
             case "urlencode":
-              value = mergeWords([
+              value = mergeWords(
                 name && name.length ? name.append("=") : new Word(),
                 percentEncodePlus(stdin),
-              ]);
+              );
               break;
             default:
               value = stdin.replace(/[\n\r]/g, "");
@@ -482,33 +620,184 @@ function buildData(
 
   let dataStrReadsFile: string | null = null;
   const dataStr = mergeWords(
-    data.map((d) => {
+    ...data.map((d) => {
       if (!(d instanceof Word)) {
         dataStrReadsFile ||= d.filename.toString(); // report first file
         if (d.name) {
-          return mergeWords([d.name, "=@", d.filename]);
+          return mergeWords(d.name, "=@", d.filename);
         }
         return d.filename.prepend("@");
       }
       return d;
-    })
+    }),
   );
 
   return [data, dataStr, dataStrReadsFile];
 }
 
+// Parses a Content-Type header into a type and a list of parameters
+function parseContentType(
+  string: string,
+): [string, Array<[string, string]>] | null {
+  if (!string.includes(";")) {
+    return [string, []];
+  }
+  const semi = string.indexOf(";");
+  const type = string.slice(0, semi);
+  const rest = string.slice(semi);
+
+  // See https://www.w3.org/Protocols/rfc1341/4_Content-Type.html
+  // TODO: could be better, like reading to the next semicolon
+  const params = rest.match(
+    /;\s*([^;=]+)=(?:("[^"]*")|([^()<>@,;:\\"/[\]?.=]*))/g,
+  );
+  if (rest.trim() && !params) {
+    return null;
+  }
+  const parsedParams: Array<[string, string]> = [];
+  for (const param of params || []) {
+    const parsedParam = param.match(
+      /;\s*([^;=]+)=(?:("[^"]*")|([^()<>@,;:\\"/[\]?.=]*))/,
+    );
+    if (!parsedParam) {
+      return null;
+    }
+    const name = parsedParam[1];
+    const value = parsedParam[3] || parsedParam[2].slice(1, -1);
+    parsedParams.push([name, value]);
+  }
+  return [type, parsedParams];
+}
+
+// Parses out the boundary= value from a Content-Type header
+function parseBoundary(string: string): string | null {
+  const header = parseContentType(string);
+  if (!header) {
+    return null;
+  }
+  for (const [name, value] of header[1]) {
+    if (name === "boundary") {
+      return value;
+    }
+  }
+  return null;
+}
+
+function parseRawForm(
+  data: string,
+  boundary: string,
+): [FormParam[], boolean] | null {
+  const endBoundary = "\r\n--" + boundary + "--\r\n";
+  if (!data.endsWith(endBoundary)) {
+    return null;
+  }
+  data = data.slice(0, -endBoundary.length);
+
+  // TODO: if empty form should it be completely empty?
+  boundary = "--" + boundary + "\r\n";
+  if (data && !data.startsWith(boundary)) {
+    return null;
+  }
+  data = data.slice(boundary.length);
+  const parts = data.split("\r\n" + boundary);
+  const form: FormParam[] = [];
+  let roundtrips = true;
+  for (const part of parts) {
+    const lines = part.split("\r\n");
+    if (lines.length < 2) {
+      return null;
+    }
+
+    const formParam: FormParam = {
+      name: new Word(),
+      content: new Word(),
+    };
+    let seenContentDisposition = false;
+    const headers: Word[] = [];
+    let i = 0;
+    for (; i < lines.length; i++) {
+      if (lines[i].length === 0) {
+        break;
+      }
+      const [name, value] = lines[i].split(": ", 2);
+      if (name === undefined || value === undefined) {
+        return null;
+      }
+      if (name.toLowerCase() === "content-disposition") {
+        if (seenContentDisposition) {
+          // should only have one
+          return null;
+        }
+
+        const contentDisposition = parseContentType(value);
+        if (!contentDisposition) {
+          return null;
+        }
+        const [type, params] = contentDisposition;
+        if (type !== "form-data") {
+          return null;
+        }
+        let extra = 0;
+        for (const [paramName, paramValue] of params) {
+          switch (paramName) {
+            case "name":
+              formParam.name = new Word(paramValue);
+              break;
+            case "filename":
+              formParam.filename = new Word(paramValue);
+              break;
+            default:
+              extra++;
+              break;
+          }
+        }
+        if (extra) {
+          roundtrips = false;
+          // TODO: warn?
+        }
+        seenContentDisposition = true;
+      } else if (name.toLowerCase() === "content-type") {
+        formParam.contentType = new Word(value);
+      } else {
+        headers.push(new Word(lines[i]));
+      }
+    }
+    if (headers.length) {
+      formParam.headers = headers;
+    }
+
+    if (!seenContentDisposition) {
+      return null;
+    }
+    if (i === lines.length) {
+      return null;
+    }
+    if (formParam.name.isEmpty()) {
+      return null;
+    }
+    formParam.content = new Word(lines.slice(i + 1).join("\n"));
+    form.push(formParam);
+  }
+  return [form, roundtrips];
+}
+
 function buildRequest(
-  global: GlobalConfig,
+  global_: GlobalConfig,
   config: OperationConfig,
   stdin?: Word,
-  stdinFile?: Word
+  stdinFile?: Word,
 ): Request {
   if (!config.url || !config.url.length) {
     // TODO: better error message (could be parsing fail)
     throw new CCError("no URL specified!");
   }
 
-  const headers = new Headers(config.header);
+  const headers = new Headers(config.header, global_.warnings);
+  const proxyHeaders = new Headers(
+    config["proxy-header"],
+    global_.warnings,
+    "--proxy-header",
+  );
 
   let cookies;
   const cookieFiles: Word[] = [];
@@ -539,10 +828,14 @@ function buildRequest(
     }
   }
 
+  let refererAuto = false;
   if (config["user-agent"]) {
     headers.setIfMissing("User-Agent", config["user-agent"]);
   }
   if (config.referer) {
+    if (config.referer.includes(";auto")) {
+      refererAuto = true;
+    }
     // referer can be ";auto" or followed by ";auto", we ignore that.
     const referer = config.referer.replace(/;auto$/, "");
     if (referer.length) {
@@ -593,7 +886,7 @@ function buildRequest(
       [data, dataStr, dataStrReadsFile] = buildData(
         config.data,
         stdin,
-        stdinFile
+        stdinFile,
       );
     }
   }
@@ -607,14 +900,14 @@ function buildRequest(
   for (const [i, url] of config.url.entries()) {
     urls.push(
       buildURL(
-        global,
+        global_,
         config,
         url,
         uploadFiles[i],
         outputFiles[i],
         stdin,
-        stdinFile
-      )
+        stdinFile,
+      ),
     );
   }
   // --get moves --data into the URL's query string
@@ -623,7 +916,7 @@ function buildRequest(
   }
 
   if ((config["upload-file"] || []).length > config.url.length) {
-    warnf(global, [
+    warnf(global_, [
       "too-many-upload-files",
       "Got more --upload-file/-T options than URLs: " +
         config["upload-file"]
@@ -632,8 +925,8 @@ function buildRequest(
     ]);
   }
   if ((config.output || []).length > config.url.length) {
-    warnf(global, [
-      "too-many-ouptut-files",
+    warnf(global_, [
+      "too-many-output-files",
       "Got more --output/-o options than URLs: " +
         config.output?.map((f) => JSON.stringify(f.toString())).join(", "),
     ]);
@@ -642,7 +935,9 @@ function buildRequest(
   const request: Request = {
     urls,
     authType: pickAuth(config.authtype),
+    proxyAuthType: pickAuth(config.proxyauthtype),
     headers,
+    proxyHeaders,
   };
   // TODO: warn about unused stdin?
   if (stdin) {
@@ -652,8 +947,20 @@ function buildRequest(
     request.stdinFile = stdinFile;
   }
 
-  if (config.globoff !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(config, "globoff")) {
     request.globoff = config.globoff;
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(config, "disallow-username-in-url")
+  ) {
+    request.disallowUsernameInUrl = config["disallow-username-in-url"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "path-as-is")) {
+    request.pathAsIs = config["path-as-is"];
+  }
+
+  if (refererAuto) {
+    request.refererAuto = true;
   }
 
   if (cookies) {
@@ -667,9 +974,19 @@ function buildRequest(
   if (config["cookie-jar"]) {
     request.cookieJar = config["cookie-jar"];
   }
+  if (Object.prototype.hasOwnProperty.call(config, "junk-session-cookies")) {
+    request.junkSessionCookies = config["junk-session-cookies"];
+  }
 
-  if (config.compressed !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(config, "compressed")) {
     request.compressed = config.compressed;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "tr-encoding")) {
+    request.transferEncoding = config["tr-encoding"];
+  }
+
+  if (config.include) {
+    request.include = true;
   }
 
   if (config.json) {
@@ -678,8 +995,39 @@ function buildRequest(
   } else if (config.data) {
     headers.setIfMissing("Content-Type", "application/x-www-form-urlencoded");
   } else if (config.form) {
-    // TODO: set content-type?
-    request.multipartUploads = parseForm(config.form);
+    // TODO: warn when details (;filename=, etc.) are not supported
+    // by each converter.
+    request.multipartUploads = parseForm(config.form, global_.warnings);
+    //headers.setIfMissing("Content-Type", "multipart/form-data");
+  }
+  const contentType = headers.getContentType();
+  const exactContentType = headers.get("Content-Type");
+  if (
+    config.data &&
+    !dataStrReadsFile &&
+    dataStr &&
+    dataStr.isString() &&
+    !config.form &&
+    !request.multipartUploads &&
+    contentType === "multipart/form-data" &&
+    exactContentType &&
+    exactContentType.isString()
+  ) {
+    const boundary = parseBoundary(exactContentType.toString());
+    if (boundary) {
+      const form = parseRawForm(dataStr.toString(), boundary);
+      if (form) {
+        const [parsedForm, roundtrip] = form;
+        request.multipartUploads = parsedForm;
+        if (!roundtrip) {
+          request.multipartUploadsDoesntRoundtrip = true;
+        }
+      }
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(config, "form-escape")) {
+    request.formEscape = config["form-escape"];
   }
 
   if (config["aws-sigv4"]) {
@@ -690,9 +1038,25 @@ function buildRequest(
   if (request.authType === "bearer" && config["oauth2-bearer"]) {
     const bearer = config["oauth2-bearer"].prepend("Bearer ");
     headers.setIfMissing("Authorization", bearer);
+    request.oauth2Bearer = config["oauth2-bearer"];
   }
   if (config.delegation) {
     request.delegation = config.delegation;
+  }
+  if (config.krb) {
+    request.krb = config.krb;
+  }
+  if (config["sasl-authzid"]) {
+    request.saslAuthzid = config["sasl-authzid"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "sasl-ir")) {
+    request.saslIr = config["sasl-ir"];
+  }
+  if (config.negotiate) {
+    request.authType = "negotiate";
+  }
+  if (config["service-name"]) {
+    request.serviceName = config["service-name"];
   }
 
   // TODO: ideally we should generate code that explicitly unsets the header too
@@ -708,7 +1072,7 @@ function buildRequest(
     // TODO: remove these
     request.isDataRaw = false;
     request.isDataBinary = (data || []).some(
-      (d) => !(d instanceof Word) && d.filetype === "binary"
+      (d) => !(d instanceof Word) && d.filetype === "binary",
     );
   }
   if (queryArray) {
@@ -717,18 +1081,58 @@ function buildRequest(
     request.queryArray = queryArray;
   }
 
-  if (config["ipv4"] !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(config, "ipv4")) {
     request["ipv4"] = config["ipv4"];
   }
-  if (config["ipv6"] !== undefined) {
+  if (Object.prototype.hasOwnProperty.call(config, "ipv6")) {
     request["ipv6"] = config["ipv6"];
+  }
+
+  if (config.proto) {
+    // TODO: parse
+    request.proto = config.proto;
+  }
+  if (config["proto-redir"]) {
+    // TODO: parse
+    request.protoRedir = config["proto-redir"];
+  }
+  if (config["proto-default"]) {
+    request.protoDefault = config["proto-default"];
+  }
+
+  if (config["tcp-fastopen"]) {
+    request.tcpFastopen = config["tcp-fastopen"];
+  }
+
+  if (config["local-port"]) {
+    // TODO: check the range
+    const [start, end] = config["local-port"].split("-", 1);
+    if (end && end.toBool()) {
+      request.localPort = [start, end];
+    } else {
+      request.localPort = [config["local-port"], null];
+    }
+  }
+
+  if (Object.prototype.hasOwnProperty.call(config, "ignore-content-length")) {
+    request.ignoreContentLength = config["ignore-content-length"];
+  }
+
+  if (config.interface) {
+    request.interface = config.interface;
   }
 
   if (config.ciphers) {
     request.ciphers = config.ciphers;
   }
+  if (config.curves) {
+    request.curves = config.curves;
+  }
   if (config.insecure) {
     request.insecure = true;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "cert-status")) {
+    request.certStatus = config["cert-status"];
   }
   // TODO: if the URL doesn't start with https://, curl doesn't verify
   // certificates, etc.
@@ -761,7 +1165,20 @@ function buildRequest(
     }
   }
   if (config["cert-type"]) {
-    request.certType = config["cert-type"];
+    const certType = config["cert-type"];
+    request.certType = certType;
+
+    if (
+      certType.isString() &&
+      !["PEM", "DER", "ENG", "P12"].includes(certType.toString().toUpperCase())
+    ) {
+      warnf(global_, [
+        "cert-type-unknown",
+        "not supported file type " +
+          JSON.stringify(certType.toString()) +
+          " for certificate",
+      ]);
+    }
   }
   if (config.key) {
     request.key = config.key;
@@ -769,8 +1186,17 @@ function buildRequest(
   if (config["key-type"]) {
     request.keyType = config["key-type"];
   }
+  if (config.pass) {
+    request.pass = config.pass;
+  }
   if (config.cacert) {
     request.cacert = config.cacert;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ca-native")) {
+    request.caNative = config["ca-native"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl-allow-beast")) {
+    request.sslAllowBeast = config["ssl-allow-beast"];
   }
   if (config.capath) {
     request.capath = config.capath;
@@ -790,16 +1216,219 @@ function buildRequest(
   if (config.hsts) {
     request.hsts = config.hsts;
   }
+  if (Object.prototype.hasOwnProperty.call(config, "alpn")) {
+    request.alpn = config.alpn;
+  }
+
+  if (config.tlsVersion) {
+    request.tlsVersion = config.tlsVersion;
+  }
+  if (config["tls-max"]) {
+    request.tlsMax = config["tls-max"];
+  }
+  if (config["tls13-ciphers"]) {
+    request.tls13Ciphers = config["tls13-ciphers"];
+  }
+  if (config["tlsauthtype"]) {
+    request.tlsauthtype = config["tlsauthtype"];
+  }
+  if (config["tlspassword"]) {
+    request.tlspassword = config["tlspassword"];
+  }
+  if (config["tlsuser"]) {
+    request.tlsuser = config["tlsuser"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl-allow-beast")) {
+    request.sslAllowBeast = config["ssl-allow-beast"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl-auto-client-cert")) {
+    request.sslAutoClientCert = config["ssl-auto-client-cert"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl-no-revoke")) {
+    request.sslNoRevoke = config["ssl-no-revoke"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl-reqd")) {
+    request.sslReqd = config["ssl-reqd"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl-revoke-best-effort")) {
+    request.sslRevokeBestEffort = config["ssl-revoke-best-effort"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "ssl")) {
+    request.ssl = config["ssl"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "sslv2")) {
+    request.sslv2 = config["sslv2"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "sslv3")) {
+    request.sslv3 = config["sslv3"];
+  }
+
+  if (config["doh-url"]) {
+    request.dohUrl = config["doh-url"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "doh-insecure")) {
+    request.dohInsecure = config["doh-insecure"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "doh-cert-status")) {
+    request.dohCertStatus = config["doh-cert-status"];
+  }
 
   if (config.proxy) {
     // https://github.com/curl/curl/blob/e498a9b1fe5964a18eb2a3a99dc52160d2768261/lib/url.c#L2388-L2390
     request.proxy = config.proxy;
+    if (request.proxyType && request.proxyType !== "http2") {
+      delete request.proxyType;
+    }
     if (config["proxy-user"]) {
       request.proxyAuth = config["proxy-user"];
     }
   }
+  if (Object.prototype.hasOwnProperty.call(config, "proxytunnel")) {
+    request.proxytunnel = config.proxytunnel;
+  }
   if (config.noproxy) {
     request.noproxy = config.noproxy;
+  }
+  if (config.preproxy) {
+    request.preproxy = config.preproxy;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-anyauth")) {
+    request.proxyAnyauth = config["proxy-anyauth"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-basic")) {
+    request.proxyBasic = config["proxy-basic"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-digest")) {
+    request.proxyDigest = config["proxy-digest"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-negotiate")) {
+    request.proxyNegotiate = config["proxy-negotiate"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-ntlm")) {
+    request.proxyNtlm = config["proxy-ntlm"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-ca-native")) {
+    request.proxyCaNative = config["proxy-ca-native"];
+  }
+  if (config["proxy-cacert"]) {
+    request.proxyCacert = config["proxy-cacert"];
+  }
+  if (config["proxy-capath"]) {
+    request.proxyCapath = config["proxy-capath"];
+  }
+  if (config["proxy-cert-type"]) {
+    request.proxyCertType = config["proxy-cert-type"];
+  }
+  if (config["proxy-cert"]) {
+    request.proxyCert = config["proxy-cert"];
+  }
+  if (config["proxy-ciphers"]) {
+    request.proxyCiphers = config["proxy-ciphers"];
+  }
+  if (config["proxy-crlfile"]) {
+    request.proxyCrlfile = config["proxy-crlfile"];
+  }
+  if (config["proxy-http2"]) {
+    request.proxyType = "http2";
+  }
+  if (config["proxy1.0"]) {
+    request.proxy = config["proxy1.0"];
+    request.proxyType = "http1";
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-insecure")) {
+    request.proxyInsecure = config["proxy-insecure"];
+  }
+  if (config["proxy-key"]) {
+    request.proxyKey = config["proxy-key"];
+  }
+  if (config["proxy-key-type"]) {
+    request.proxyKeyType = config["proxy-key-type"];
+  }
+  if (config["proxy-pass"]) {
+    request.proxyPass = config["proxy-pass"];
+  }
+  if (config["proxy-pinnedpubkey"]) {
+    request.proxyPinnedpubkey = config["proxy-pinnedpubkey"];
+  }
+  if (config["proxy-pinnedpubkey"]) {
+    request.proxyPinnedpubkey = config["proxy-pinnedpubkey"];
+  }
+  if (config["proxy-service-name"]) {
+    request.proxyServiceName = config["proxy-service-name"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-ssl-allow-beast")) {
+    request.proxySslAllowBeast = config["proxy-ssl-allow-beast"];
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(config, "proxy-ssl-auto-client-cert")
+  ) {
+    request.proxySslAutoClientCert = config["proxy-ssl-auto-client-cert"];
+  }
+  if (config["proxy-tls13-ciphers"]) {
+    request.proxyTls13Ciphers = config["proxy-tls13-ciphers"];
+  }
+  if (config["proxy-tlsauthtype"]) {
+    request.proxyTlsauthtype = config["proxy-tlsauthtype"];
+    if (
+      request.proxyTlsauthtype.isString() &&
+      !eq(request.proxyTlsauthtype, "SRP")
+    ) {
+      warnf(global_, [
+        "proxy-tlsauthtype",
+        "proxy-tlsauthtype is not supported: " + request.proxyTlsauthtype,
+      ]);
+    }
+  }
+  if (config["proxy-tlspassword"]) {
+    request.proxyTlspassword = config["proxy-tlspassword"];
+  }
+  if (config["proxy-tlsuser"]) {
+    request.proxyTlsuser = config["proxy-tlsuser"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxy-tlsv1")) {
+    request.proxyTlsv1 = config["proxy-tlsv1"];
+  }
+  if (config["proxy-user"]) {
+    request.proxyUser = config["proxy-user"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "proxytunnel")) {
+    request.proxytunnel = config["proxytunnel"];
+  }
+
+  if (config["socks4"]) {
+    request.proxy = config["socks4"];
+    request.proxyType = "socks4";
+  }
+  if (config["socks4a"]) {
+    request.proxy = config["socks4a"];
+    request.proxyType = "socks4a";
+  }
+  if (config["socks5"]) {
+    request.proxy = config["socks5"];
+    request.proxyType = "socks5";
+  }
+  if (config["socks5-hostname"]) {
+    request.proxy = config["socks5-hostname"];
+    request.proxyType = "socks5-hostname";
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "socks5-basic")) {
+    request.socks5Basic = config["socks5-basic"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "socks5-gssapi-nec")) {
+    request.socks5GssapiNec = config["socks5-gssapi-nec"];
+  }
+  if (config["socks5-gssapi-service"]) {
+    request.socks5GssapiService = config["socks5-gssapi-service"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "socks5-gssapi")) {
+    request.socks5Gssapi = config["socks5-gssapi"];
+  }
+
+  if (config["haproxy-clientip"]) {
+    request.haproxyClientIp = config["haproxy-clientip"];
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "haproxy-protocol")) {
+    request.haproxyProtocol = config["haproxy-protocol"];
   }
 
   if (config["max-time"]) {
@@ -809,7 +1438,7 @@ function buildRequest(
       // TODO: parseFloat() like curl
       isNaN(parseFloat(config["max-time"].toString()))
     ) {
-      warnf(global, [
+      warnf(global_, [
         "max-time-not-number",
         "option --max-time: expected a proper numerical parameter: " +
           JSON.stringify(config["max-time"].toString()),
@@ -822,19 +1451,51 @@ function buildRequest(
       config["connect-timeout"].isString() &&
       isNaN(parseFloat(config["connect-timeout"].toString()))
     ) {
-      warnf(global, [
+      warnf(global_, [
         "connect-timeout-not-number",
         "option --connect-timeout: expected a proper numerical parameter: " +
           JSON.stringify(config["connect-timeout"].toString()),
       ]);
     }
   }
+  if (config["expect100-timeout"]) {
+    request.expect100Timeout = config["expect100-timeout"];
+    if (
+      config["expect100-timeout"].isString() &&
+      isNaN(parseFloat(config["expect100-timeout"].toString()))
+    ) {
+      warnf(global_, [
+        "expect100-timeout-not-number",
+        "option --expect100-timeout: expected a proper numerical parameter: " +
+          JSON.stringify(config["expect100-timeout"].toString()),
+      ]);
+    }
+  }
+  if (config["happy-eyeballs-timeout-ms"]) {
+    request.happyEyeballsTimeoutMs = config["happy-eyeballs-timeout-ms"];
+  }
+  if (config["speed-limit"]) {
+    request.speedLimit = config["speed-limit"];
+  }
+  if (config["speed-time"]) {
+    request.speedTime = config["speed-time"];
+  }
   if (config["limit-rate"]) {
     request.limitRate = config["limit-rate"];
+  }
+  if (config["max-filesize"]) {
+    request.maxFilesize = config["max-filesize"];
   }
 
   if (Object.prototype.hasOwnProperty.call(config, "keepalive")) {
     request.keepAlive = config.keepalive;
+  }
+  if (config["keepalive-time"]) {
+    request.keepAliveTime = config["keepalive-time"];
+  }
+
+  if (config["alt-svc"]) {
+    request.altSvc = config["alt-svc"];
   }
 
   if (Object.prototype.hasOwnProperty.call(config, "location")) {
@@ -849,24 +1510,66 @@ function buildRequest(
       config["max-redirs"].isString() &&
       !isInt(config["max-redirs"].toString())
     ) {
-      warnf(global, [
+      warnf(global_, [
         "max-redirs-not-int",
         "option --max-redirs: expected a proper numerical parameter: " +
           JSON.stringify(config["max-redirs"].toString()),
       ]);
     }
   }
-
-  const http2 = config.http2 || config["http2-prior-knowledge"];
-  if (http2) {
-    request.http2 = http2;
+  if (Object.prototype.hasOwnProperty.call(config, "post301")) {
+    request.post301 = config.post301;
   }
-  if (config.http3 || config["http3-only"]) {
-    request.http3 = true;
+  if (Object.prototype.hasOwnProperty.call(config, "post302")) {
+    request.post302 = config.post302;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "post303")) {
+    request.post303 = config.post303;
+  }
+
+  if (config.fail) {
+    request.fail = config.fail;
+  }
+
+  if (config.retry) {
+    request.retry = config.retry;
+  }
+  if (config["retry-max-time"]) {
+    request.retryMaxTime = config["retry-max-time"];
+  }
+
+  if (Object.prototype.hasOwnProperty.call(config, "ftp-skip-pasv-ip")) {
+    request.ftpSkipPasvIp = config["ftp-skip-pasv-ip"];
+  }
+
+  if (config.httpVersion) {
+    if (
+      config.httpVersion === "2" ||
+      config.httpVersion === "2-prior-knowledge"
+    ) {
+      request.http2 = true;
+    }
+    if (config.httpVersion === "3" || config.httpVersion === "3-only") {
+      request.http3 = true;
+    }
+    request.httpVersion = config.httpVersion;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "http0.9")) {
+    request.http0_9 = config["http0.9"];
+  }
+
+  if (config.resolve && config.resolve.length) {
+    request.resolve = config.resolve;
+  }
+  if (config["connect-to"] && config["connect-to"].length) {
+    request.connectTo = config["connect-to"];
   }
 
   if (config["unix-socket"]) {
     request.unixSocket = config["unix-socket"];
+  }
+  if (config["abstract-unix-socket"]) {
+    request.abstractUnixSocket = config["abstract-unix-socket"];
   }
 
   if (config["netrc-optional"]) {
@@ -877,35 +1580,58 @@ function buildRequest(
     // TODO || config["netrc-optional"] === false ?
     request.netrc = "ignored";
   }
-
-  if (global.verbose) {
-    request.verbose = true;
+  if (config["netrc-file"]) {
+    request.netrcFile = config["netrc-file"];
   }
-  if (global.silent) {
-    request.silent = true;
+
+  if (config["use-ascii"]) {
+    request.useAscii = config["use-ascii"];
+  }
+
+  if (config["continue-at"]) {
+    request.continueAt = config["continue-at"];
+  }
+
+  if (Object.prototype.hasOwnProperty.call(config, "crlf")) {
+    request.crlf = config.crlf;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(config, "clobber")) {
+    request.clobber = config.clobber;
+  }
+  if (Object.prototype.hasOwnProperty.call(config, "remote-time")) {
+    request.remoteTime = config["remote-time"];
+  }
+
+  // Global options
+  if (Object.prototype.hasOwnProperty.call(global_, "verbose")) {
+    request.verbose = global_.verbose;
+  }
+  if (Object.prototype.hasOwnProperty.call(global_, "silent")) {
+    request.silent = global_.silent;
   }
 
   return request;
 }
 
 export function buildRequests(
-  global: GlobalConfig,
+  global_: GlobalConfig,
   stdin?: Word,
-  stdinFile?: Word
+  stdinFile?: Word,
 ): Request[] {
-  if (!global.configs.length) {
+  if (!global_.configs.length) {
     // shouldn't happen
-    warnf(global, ["no-configs", "got empty config object"]);
+    warnf(global_, ["no-configs", "got empty config object"]);
   }
-  return global.configs.map((config) =>
-    buildRequest(global, config, stdin, stdinFile)
+  return global_.configs.map((config) =>
+    buildRequest(global_, config, stdin, stdinFile),
   );
 }
 
 export function getFirst(
   requests: Request[],
   warnings: Warnings,
-  support?: Support
+  support?: Support,
 ): Request {
   if (requests.length > 1) {
     warnings.push([

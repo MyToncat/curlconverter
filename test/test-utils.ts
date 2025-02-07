@@ -9,7 +9,6 @@ import { fileURLToPath } from "url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const fixturesDir = path.resolve(__dirname, "../../test/fixtures");
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function stringifyWords(o: any): any {
   if (o instanceof Word) {
     return o.toString();
@@ -22,7 +21,7 @@ function stringifyWords(o: any): any {
       Object.entries(o).map((oo) => [
         stringifyWords(oo[0]),
         stringifyWords(oo[1]),
-      ])
+      ]),
     );
   }
   return o;
@@ -40,6 +39,11 @@ const converters = {
     name: "Ansible",
     extension: ".yml",
     converter: curlconverter.toAnsible,
+  },
+  c: {
+    name: "C",
+    extension: ".c",
+    converter: curlconverter.toC,
   },
   cfml: {
     name: "ColdFusion",
@@ -126,10 +130,20 @@ const converters = {
     extension: ".json",
     converter: curlconverter.toJsonString,
   },
+  julia: {
+    name: "Julia",
+    extension: ".jl",
+    converter: curlconverter.toJulia,
+  },
   kotlin: {
     name: "Kotlin",
     extension: ".kt",
     converter: curlconverter.toKotlin,
+  },
+  lua: {
+    name: "Lua",
+    extension: ".lua",
+    converter: curlconverter.toLua,
   },
   matlab: {
     name: "MATLAB",
@@ -156,6 +170,11 @@ const converters = {
     extension: ".js",
     converter: curlconverter.toNodeHttp,
   },
+  "node-ky": {
+    name: "Node + Ky",
+    extension: ".js",
+    converter: curlconverter.toNodeKy,
+  },
   "node-request": {
     name: "Node + request",
     extension: ".js",
@@ -165,6 +184,21 @@ const converters = {
     name: "Node + SuperAgent",
     extension: ".js",
     converter: curlconverter.toNodeSuperAgent,
+  },
+  objectivec: {
+    name: "Objective-C",
+    extension: ".m",
+    converter: curlconverter.toObjectiveC,
+  },
+  ocaml: {
+    name: "OCaml",
+    extension: ".ml",
+    converter: curlconverter.toOCaml,
+  },
+  perl: {
+    name: "Perl",
+    extension: ".pl",
+    converter: curlconverter.toPerl,
   },
   php: {
     name: "PHP",
@@ -191,15 +225,30 @@ const converters = {
     extension: ".r",
     converter: curlconverter.toR,
   },
+  "r-httr2": {
+    name: "R + httr2",
+    extension: ".r",
+    converter: curlconverter.toRHttr2,
+  },
   ruby: {
     name: "Ruby",
     extension: ".rb",
     converter: curlconverter.toRuby,
   },
+  "ruby-httparty": {
+    name: "Ruby HTTParty",
+    extension: ".rb",
+    converter: curlconverter.toRubyHttparty,
+  },
   rust: {
     name: "Rust",
     extension: ".rs",
     converter: curlconverter.toRust,
+  },
+  swift: {
+    name: "Swift",
+    extension: ".swift",
+    converter: curlconverter.toSwift,
   },
   wget: {
     name: "Wget",
@@ -217,7 +266,7 @@ type Converter = keyof typeof converters;
 // Check that we have at least one test for every generator
 // https://github.com/curlconverter/curlconverter/pull/299
 const testedConverters = Object.entries(converters).map(
-  (c) => c[1].converter.name
+  (c) => c[1].converter.name,
 );
 const untestedConverters = ["toPhpRequests"];
 const notConverterExports = ["Word"];
@@ -230,17 +279,17 @@ const missing = availableConverters.filter(
     !testedConverters.includes(c) &&
     !untestedConverters.includes(c) &&
     !notConverterExports.includes(c) &&
-    !c.endsWith("Warn")
+    !c.endsWith("Warn"),
 );
 const extra = testedConverters.filter(
-  (c) => !availableConverters.includes(c) && c !== "toParser"
+  (c) => !availableConverters.includes(c) && c !== "toParser",
 );
 if (missing.length) {
   console.error("these converters are not tested: " + missing.join(", "));
 }
 if (extra.length) {
   console.error(
-    "these non-existant converters are being tested: " + extra.join(", ")
+    "these non-existant converters are being tested: " + extra.join(", "),
   );
 }
 for (const [converterName, converter] of Object.entries(converters)) {
@@ -257,12 +306,12 @@ for (const [converterName, converter] of Object.entries(converters)) {
         testDir +
           " doesn't have any files ending with '" +
           converter.extension +
-          "'"
+          "'",
       );
     }
   } else {
     console.error(
-      converterName + " doesn't have a corresponding directory in fixtures/"
+      converterName + " doesn't have a corresponding directory in fixtures/",
     );
   }
 }

@@ -93,6 +93,7 @@ export const curlLongOpts = {
   "krb4": { type: "string", name: "krb" },
   "haproxy-protocol": { type: "bool", name: "haproxy-protocol" },
   "no-haproxy-protocol": { type: "bool", name: "haproxy-protocol", expand: false },
+  "haproxy-clientip": { type: "string", name: "haproxy-clientip" },
   "max-filesize": { type: "string", name: "max-filesize" },
   "disable-eprt": { type: "bool", name: "disable-eprt" },
   "no-disable-eprt": { type: "bool", name: "disable-eprt", expand: false },
@@ -201,6 +202,8 @@ export const curlLongOpts = {
   "happy-eyeballs-timeout-ms": { type: "string", name: "happy-eyeballs-timeout-ms" },
   "retry-all-errors": { type: "bool", name: "retry-all-errors" },
   "no-retry-all-errors": { type: "bool", name: "retry-all-errors", expand: false },
+  "trace-ids": { type: "bool", name: "trace-ids" },
+  "no-trace-ids": { type: "bool", name: "trace-ids", expand: false },
   "http1.0": { type: "bool", name: "http1.0" },
   "http1.1": { type: "bool", name: "http1.1" },
   "http2": { type: "bool", name: "http2" },
@@ -248,6 +251,10 @@ export const curlLongOpts = {
   "key-type": { type: "string", name: "key-type" },
   "pass": { type: "string", name: "pass" },
   "engine": { type: "string", name: "engine" },
+  "ca-native": { type: "bool", name: "ca-native" },
+  "no-ca-native": { type: "bool", name: "ca-native", expand: false },
+  "proxy-ca-native": { type: "bool", name: "proxy-ca-native" },
+  "no-proxy-ca-native": { type: "bool", name: "proxy-ca-native", expand: false },
   "capath": { type: "string", name: "capath" },
   "pubkey": { type: "string", name: "pubkey" },
   "hostpubmd5": { type: "string", name: "hostpubmd5" },
@@ -465,7 +472,7 @@ for (const [opt, val] of Object.entries(curlLongOpts)) {
       if (
         !Object.prototype.hasOwnProperty.call(
           curlLongOptsShortened,
-          shortenedOpt
+          shortenedOpt,
         )
       ) {
         if (!Object.prototype.hasOwnProperty.call(curlLongOpts, shortenedOpt)) {
@@ -485,11 +492,18 @@ for (const [opt, val] of Object.entries(curlLongOpts)) {
 export const COMMON_SUPPORTED_ARGS: string[] = [
   "url",
   "proto-default",
+  // Controls whether or not backslash-escaped [] {} will have the backslash removed.
+  "globoff",
+  // curl will exit if it finds auth credentials in the URL with this option,
+  // we remove it from the URL and emit a warning instead.
+  "disallow-username-in-url",
+
   // Method
   "request",
   "get",
   "head",
   "no-head",
+
   // Headers
   "header", // TODO: can be a file
   "user-agent",
@@ -498,6 +512,7 @@ export const COMMON_SUPPORTED_ARGS: string[] = [
   "time-cond",
   "cookie", // TODO: can be a file
   "oauth2-bearer",
+
   // Basic Auth
   "user",
   "basic",
@@ -510,13 +525,6 @@ export const COMMON_SUPPORTED_ARGS: string[] = [
   "data-urlencode",
   "json",
   "url-query",
-
-  // Trivial support for globoff means controlling whether or not
-  // backslash-escaped [] {} will have the backslash removed.
-  "globoff",
-  // curl will exit if it finds auth credentials in the URL with this option,
-  // we remove it from the URL and emit a warning instead.
-  "disallow-username-in-url",
 
   // TODO: --compressed is already the default for some runtimes, in
   // which case we might have to only warn that --no-compressed isn't supported.
@@ -627,7 +635,7 @@ export interface OperationConfig {
 
   // Not the same name as the curl options that set it
   authtype: number;
-  authArgs?: [string, boolean][];
+  proxyauthtype: number;
 
   json?: boolean;
 
@@ -647,9 +655,8 @@ export interface OperationConfig {
   quote?: Word[];
   "telnet-option"?: Word[];
 
-  http2?: boolean;
-  http3?: boolean;
-  "http3-only"?: boolean;
+  httpVersion?: "1.0" | "1.1" | "2" | "2-prior-knowledge" | "3" | "3-only";
+  tlsVersion?: "1" | "1.0" | "1.1" | "1.2" | "1.3";
 
   netrc?: boolean;
   "netrc-optional"?: boolean;
@@ -717,6 +724,7 @@ export interface OperationConfig {
   append?: boolean;
   basic?: boolean;
   buffer?: boolean;
+  "ca-native"?: boolean;
   "cert-status"?: boolean;
   clobber?: boolean;
   "compressed-ssh"?: boolean;
@@ -766,6 +774,7 @@ export interface OperationConfig {
   "ftp-ssl-ccc-mode"?: Word;
   "ftp-ssl-control"?: boolean;
   "happy-eyeballs-timeout-ms"?: Word;
+  "haproxy-clientip"?: Word;
   "haproxy-protocol"?: boolean;
   hostpubmd5?: Word;
   hostpubsha256?: Word;
@@ -894,11 +903,11 @@ export interface OperationConfig {
   // TODO: remove any.
   // This is difficult because we have curl's arguments but also a couple
   // curlconverter-specific arguments that are handled by the same code.
-  [key: string]: any; // eslint-disable-line @typescript-eslint/no-explicit-any
+  [key: string]: any;
 }
 // type Satisfies<T, U extends T> = void;
 // type AssertSubsetKeys = Satisfies<
-//   keyof typeof curlLongOpts | "authtype" | "authArgs",
+//   keyof typeof curlLongOpts | "authtype" | "proxyauthtype",
 //   keyof OperationConfig
 // >;
 
@@ -907,8 +916,6 @@ export interface OperationConfig {
 // For all other options, if you specify it more than once
 // curl will use the last one.
 const canBeList = new Set<keyof OperationConfig>([
-  "authArgs", // used for error messages
-
   "connect-to",
   "cookie",
   "data",
@@ -956,14 +963,14 @@ export interface GlobalConfig {
 }
 
 function checkSupported(
-  global: GlobalConfig,
+  global_: GlobalConfig,
   lookup: string,
   longArg: LongShort,
-  supportedOpts?: Set<string>
+  supportedOpts?: Set<string>,
 ) {
   if (supportedOpts && !supportedOpts.has(longArg.name)) {
     // TODO: better message. include generator name?
-    warnf(global, [
+    warnf(global_, [
       longArg.name,
       lookup +
         " is not a supported option" +
@@ -975,7 +982,7 @@ function checkSupported(
 export function pushProp<Type>(
   obj: { [key: string]: Type[] },
   prop: string,
-  value: Type
+  value: Type,
 ) {
   if (!Object.prototype.hasOwnProperty.call(obj, prop)) {
     obj[prop] = [];
@@ -985,10 +992,10 @@ export function pushProp<Type>(
 }
 
 function pushArgValue(
-  global: GlobalConfig,
+  global_: GlobalConfig,
   config: OperationConfig,
   argName: string,
-  value: Word
+  value: Word,
 ) {
   // Note: cli.ts assumes that the property names on OperationConfig
   // are the same as the passed in argument in an error message, so
@@ -1030,11 +1037,9 @@ function pushArgValue(
       return pushProp(config, "form", { value, type: "string" });
 
     case "aws-sigv4":
-      pushProp(config, "authArgs", [argName, true]); // error reporting
       config.authtype |= CURLAUTH_AWS_SIGV4;
       break;
     case "oauth2-bearer":
-      pushProp(config, "authArgs", [argName, true]); // error reporting
       config.authtype |= CURLAUTH_BEARER;
       break;
 
@@ -1052,11 +1057,11 @@ function pushArgValue(
     case "libcurl":
     case "config":
     case "parallel-max":
-      global[argName] = value;
+      global_[argName] = value;
       break;
 
     case "language": // --language is a curlconverter specific option
-      global[argName] = value.toString();
+      global_[argName] = value.toString();
       return;
   }
 
@@ -1065,38 +1070,55 @@ function pushArgValue(
 
 // Might create a new config
 function setArgValue(
-  global: GlobalConfig,
+  global_: GlobalConfig,
   config: OperationConfig,
   argName: string,
-  toggle: boolean
+  toggle: boolean,
 ): OperationConfig {
   switch (argName) {
     case "digest":
-      pushProp(config, "authArgs", [argName, toggle]); // error reporting
       if (toggle) {
         config.authtype |= CURLAUTH_DIGEST;
       } else {
         config.authtype &= ~CURLAUTH_DIGEST;
       }
       break;
+    case "proxy-digest":
+      if (toggle) {
+        config.proxyauthtype |= CURLAUTH_DIGEST;
+      } else {
+        config.proxyauthtype &= ~CURLAUTH_DIGEST;
+      }
+      break;
     case "negotiate":
-      pushProp(config, "authArgs", [argName, toggle]); // error reporting
       if (toggle) {
         config.authtype |= CURLAUTH_NEGOTIATE;
       } else {
         config.authtype &= ~CURLAUTH_NEGOTIATE;
       }
       break;
+    case "proxy-negotiate":
+      if (toggle) {
+        config.proxyauthtype |= CURLAUTH_NEGOTIATE;
+      } else {
+        config.proxyauthtype &= ~CURLAUTH_NEGOTIATE;
+      }
+      break;
     case "ntlm":
-      pushProp(config, "authArgs", [argName, toggle]); // error reporting
       if (toggle) {
         config.authtype |= CURLAUTH_NTLM;
       } else {
         config.authtype &= ~CURLAUTH_NTLM;
       }
       break;
+    case "proxy-ntlm":
+      if (toggle) {
+        config.proxyauthtype |= CURLAUTH_NTLM;
+      } else {
+        config.proxyauthtype &= ~CURLAUTH_NTLM;
+      }
+      break;
     case "ntlm-wb":
-      pushProp(config, "authArgs", [argName, toggle]); // error reporting
       if (toggle) {
         config.authtype |= CURLAUTH_NTLM_WB;
       } else {
@@ -1104,17 +1126,27 @@ function setArgValue(
       }
       break;
     case "basic":
-      pushProp(config, "authArgs", [argName, toggle]); // error reporting
       if (toggle) {
         config.authtype |= CURLAUTH_BASIC;
       } else {
         config.authtype &= ~CURLAUTH_BASIC;
       }
       break;
+    case "proxy-basic":
+      if (toggle) {
+        config.proxyauthtype |= CURLAUTH_BASIC;
+      } else {
+        config.proxyauthtype &= ~CURLAUTH_BASIC;
+      }
+      break;
     case "anyauth":
-      pushProp(config, "authArgs", [argName, toggle]); // error reporting
       if (toggle) {
         config.authtype = CURLAUTH_ANY;
+      }
+      break;
+    case "proxy-anyauth":
+      if (toggle) {
+        config.proxyauthtype = CURLAUTH_ANY;
       }
       break;
     case "location":
@@ -1123,6 +1155,39 @@ function setArgValue(
     case "location-trusted":
       config["location"] = toggle;
       config["location-trusted"] = toggle;
+      break;
+    case "http1.0":
+      config.httpVersion = "1.0";
+      break;
+    case "http1.1":
+      config.httpVersion = "1.1";
+      break;
+    case "http2":
+      config.httpVersion = "2";
+      break;
+    case "http2-prior-knowledge":
+      config.httpVersion = "2-prior-knowledge";
+      break;
+    case "http3":
+      config.httpVersion = "3";
+      break;
+    case "http3-only":
+      config.httpVersion = "3-only";
+      break;
+    case "tlsv1":
+      config.tlsVersion = "1";
+      break;
+    case "tlsv1.0":
+      config.tlsVersion = "1.0";
+      break;
+    case "tlsv1.1":
+      config.tlsVersion = "1.1";
+      break;
+    case "tlsv1.2":
+      config.tlsVersion = "1.2";
+      break;
+    case "tlsv1.3":
+      config.tlsVersion = "1.3";
       break;
     case "verbose":
     case "version":
@@ -1138,7 +1203,7 @@ function setArgValue(
     case "parallel":
     case "parallel-immediate":
     case "stdin": // --stdin or - is a curlconverter specific option
-      global[argName] = toggle;
+      global_[argName] = toggle;
       break;
     case "next":
       // curl ignores --next if the last url node doesn't have a url
@@ -1149,8 +1214,8 @@ function setArgValue(
         config.url.length >= (config["upload-file"] || []).length &&
         config.url.length >= (config.output || []).length
       ) {
-        config = { authtype: CURLAUTH_BASIC };
-        global.configs.push(config);
+        config = { authtype: CURLAUTH_BASIC, proxyauthtype: CURLAUTH_BASIC };
+        global_.configs.push(config);
       }
       break;
     default:
@@ -1165,10 +1230,14 @@ export function parseArgs(
   shortenedLongOpts: LongOpts = curlLongOptsShortened,
   shortOpts: ShortOpts = curlShortOpts,
   supportedOpts?: Set<string>,
-  warnings: Warnings = []
-): GlobalConfig {
-  let config: OperationConfig = { authtype: CURLAUTH_BASIC };
-  const global: GlobalConfig = { configs: [config], warnings };
+  warnings: Warnings = [],
+): [GlobalConfig, [string, string][]] {
+  let config: OperationConfig = {
+    authtype: CURLAUTH_BASIC,
+    proxyauthtype: CURLAUTH_BASIC,
+  };
+  const global_: GlobalConfig = { configs: [config], warnings };
+  const seen: [string, string][] = [];
 
   for (let i = 1, stillflags = true; i < args.length; i++) {
     const arg: Word = args[i];
@@ -1188,7 +1257,7 @@ export function parseArgs(
               " could " +
               (shellToken.type === "command" ? "return" : "be") +
               " anything\n" +
-              underlineNode(shellToken.syntaxNode)
+              underlineNode(shellToken.syntaxNode),
           );
         }
         const argStr = arg.toString();
@@ -1212,17 +1281,18 @@ export function parseArgs(
           if (i >= args.length) {
             throw new CCError("option " + argStr + ": requires parameter");
           }
-          pushArgValue(global, config, longArg.name, args[i]);
+          pushArgValue(global_, config, longArg.name, args[i]);
         } else {
           config = setArgValue(
-            global,
+            global_,
             config,
             longArg.name,
-            toBoolean(argStr.slice(2))
+            toBoolean(argStr.slice(2)),
           ); // TODO: all shortened args work correctly?
         }
 
-        checkSupported(global, argStr, longArg, supportedOpts);
+        checkSupported(global_, argStr, longArg, supportedOpts);
+        seen.push([longArg.name, argStr]);
       } else {
         // Short option. These can look like
         // -X POST    -> {request: 'POST'}
@@ -1243,11 +1313,12 @@ export function parseArgs(
               throw new CCError("option -: is unknown");
             }
             config = setArgValue(
-              global,
+              global_,
               config,
               longArg.name,
-              toBoolean(shortFor)
+              toBoolean(shortFor),
             );
+            seen.push([longArg.name, "-"]);
           } else {
             throw new CCError("option -: is unknown");
           }
@@ -1263,13 +1334,13 @@ export function parseArgs(
                 " could " +
                 (jthChar.type === "command" ? "return" : "be") +
                 " anything\n" +
-                underlineNode(jthChar.syntaxNode)
+                underlineNode(jthChar.syntaxNode),
             );
           }
           if (!has(shortOpts, jthChar)) {
             if (has(changedShortOpts, jthChar)) {
               throw new CCError(
-                "option " + arg + ": " + changedShortOpts[jthChar]
+                "option " + arg + ": " + changedShortOpts[jthChar],
               );
             }
             // TODO: there are a few deleted short options we could report
@@ -1293,22 +1364,23 @@ export function parseArgs(
               val = args[i];
             } else {
               throw new CCError(
-                "option " + arg.toString() + ": requires parameter"
+                "option " + arg.toString() + ": requires parameter",
               );
             }
-            pushArgValue(global, config, longArg.name, val);
+            pushArgValue(global_, config, longArg.name, val);
           } else {
             // Use shortFor because -N is short for --no-buffer
             // and we want to end up with {buffer: false}
             config = setArgValue(
-              global,
+              global_,
               config,
               longArg.name,
-              toBoolean(shortFor)
+              toBoolean(shortFor),
             );
           }
           if (lookup) {
-            checkSupported(global, "-" + lookup, longArg, supportedOpts);
+            checkSupported(global_, "-" + lookup, longArg, supportedOpts);
+            seen.push([longArg.name, "-" + lookup]);
           }
         }
       }
@@ -1329,16 +1401,17 @@ export function parseArgs(
             underlineNode(arg.tokens[0].syntaxNode),
         ]);
       }
-      pushArgValue(global, config, "url", arg);
+      pushArgValue(global_, config, "url", arg);
+      seen.push(["url", "--url"]);
     }
   }
 
-  for (const cfg of global.configs) {
+  for (const cfg of global_.configs) {
     for (const [arg, values] of Object.entries(cfg)) {
       if (Array.isArray(values) && !canBeList.has(arg)) {
         cfg[arg] = values[values.length - 1];
       }
     }
   }
-  return global;
+  return [global_, seen];
 }

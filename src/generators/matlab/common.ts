@@ -2,9 +2,8 @@ import { CCError } from "../../utils.js";
 import { Word } from "../../shell/Word.js";
 import type { Request } from "../../parse.js";
 
-// Use negative lookahead because " " is a Z but we don't want to escape it
-// Wrap \p{C}|\p{Z} in brakets so that splitting keeps the characters to escape
-const regexEscape = /(?! )(\p{C}|\p{Z})/gu;
+// Wrap in brakets so that splitting keeps the characters to escape
+const regexEscape = /(\p{C}|[^ \P{Z}])/gu;
 // TODO: do we need to consider that some strings could be used
 // with sprintf() and have to have more stuff escaped?
 function strToParts(s: string): string[] {
@@ -81,7 +80,7 @@ function repr(w: Word | null) {
 function setVariableValue(
   outputVariable: string | null,
   value: string,
-  termination?: string
+  termination?: string,
 ): string {
   let result = "";
 
@@ -101,7 +100,7 @@ function callFunction(
   outputVariable: string | null,
   functionName: string,
   params: string | string[] | string[][],
-  termination?: string
+  termination?: string,
 ) {
   let functionCall = functionName + "(";
   if (Array.isArray(params)) {
@@ -137,7 +136,7 @@ function addCellArray(
   mapping: ([Word, Word] | [string, Word | string])[],
   keysNotToQuote?: string[],
   indentLevel = 1,
-  pairs?: boolean
+  pairs?: boolean,
 ) {
   if (mapping.length === 0) return ""; // shouldn't happen
 
@@ -188,7 +187,7 @@ function addCellArray(
 
 function structify(
   obj: number[] | string[] | { [key: string]: string } | string | number | null,
-  indentLevel?: number
+  indentLevel?: number,
 ) {
   let response = "";
   indentLevel = !indentLevel ? 1 : ++indentLevel;
@@ -220,7 +219,7 @@ function structify(
       if (Object.prototype.hasOwnProperty.call(obj, k)) {
         if (!k[0].match(/[a-z]/i)) {
           throw new CCError(
-            "MATLAB structs do not support keys starting with non-alphabet symbols"
+            "MATLAB structs do not support keys starting with non-alphabet symbols",
           );
         }
         // recursive call to scan property

@@ -4,7 +4,7 @@ import { parse, COMMON_SUPPORTED_ARGS } from "../parse.js";
 import type { Request, Warnings } from "../parse.js";
 import { parseQueryString } from "../Query.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -13,15 +13,13 @@ const supportedArgs = new Set([
   "next",
 ]);
 
-const regexEscape = /"|\\|\p{C}|\p{Z}|#\{/gu;
+const regexEscape = /"|\\|\p{C}|[^ \P{Z}]|#\{/gu;
 
 export function reprStr(s: string): string {
   return (
     '"' +
     s.replace(regexEscape, (c: string): string => {
       switch (c[0]) {
-        case " ":
-          return " ";
         case "\x00":
           return "\\0";
         case "\x07":
@@ -89,7 +87,7 @@ function getCookies(request: Request): string {
   // TODO: this duplicates work, just get it from request.headers
   const cookies = joinWords(
     request.cookies.map((c) => joinWords(c, "=")),
-    "; "
+    "; ",
   );
   return `cookie: [${repr(cookies)}]`;
 }
@@ -114,7 +112,7 @@ function getOptions(request: Request, params: string): [string, string] {
   let hackneyOptionsString = "";
   if (hackneyOptions.length > 1) {
     hackneyOptionsString = `hackney: [\n    ${hackneyOptions.join(
-      ",\n    "
+      ",\n    ",
     )}\n  ]`;
   } else if (hackneyOptions.length) {
     hackneyOptionsString = `hackney: [${hackneyOptions[0]}]`;
@@ -167,7 +165,7 @@ function getHeadersDict(request: Request): string {
   const dictLines: string[] = [];
   for (const [headerName, headerValue] of request.headers) {
     dictLines.push(
-      `    {${repr(headerName)}, ${repr(headerValue ?? new Word())}}`
+      `    {${repr(headerName)}, ${repr(headerValue ?? new Word())}}`,
     );
   }
   dict += dictLines.join(",\n");
@@ -181,37 +179,36 @@ function getBody(request: Request): string {
 }
 
 function getFormDataString(request: Request): string {
-  if (request.data) {
-    return getDataString(request);
-  }
+  if (request.multipartUploads) {
+    if (!request.multipartUploads.length) {
+      return `{:multipart, []}`;
+    }
 
-  if (!request.multipartUploads) {
-    return "";
-  }
-  if (!request.multipartUploads.length) {
-    return `{:multipart, []}`;
-  }
+    const formParams: string[] = [];
+    for (const m of request.multipartUploads) {
+      if ("contentFile" in m) {
+        formParams.push(
+          `    {:file, ${repr(m.contentFile)}, {"form-data", [{:name, ${repr(
+            m.name,
+          )}}, {:filename, Path.basename(${repr(
+            m.filename ?? m.contentFile,
+          )})}]}, []}`,
+        );
+      } else {
+        formParams.push(`    {${repr(m.name)}, ${repr(m.content)}}`);
+      }
+    }
 
-  const formParams: string[] = [];
-  for (const m of request.multipartUploads) {
-    if ("contentFile" in m) {
-      formParams.push(
-        `    {:file, ${repr(m.contentFile)}, {"form-data", [{:name, ${repr(
-          m.name
-        )}}, {:filename, Path.basename(${repr(
-          m.filename ?? m.contentFile
-        )})}]}, []}`
-      );
-    } else {
-      formParams.push(`    {${repr(m.name)}, ${repr(m.content)}}`);
+    const formStr = formParams.join(",\n");
+    if (formStr) {
+      return `{:multipart, [
+${formStr}
+  ]}`;
     }
   }
 
-  const formStr = formParams.join(",\n");
-  if (formStr) {
-    return `{:multipart, [
-${formStr}
-  ]}`;
+  if (request.data) {
+    return getDataString(request);
   }
 
   return "";
@@ -333,14 +330,14 @@ response = HTTPoison.request(request)
 
 export function _toElixir(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   return requests.map((r) => requestToElixir(r, warnings)).join("\n");
 }
 
 export function toElixirWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const elixir = _toElixir(requests, warnings);

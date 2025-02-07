@@ -5,7 +5,7 @@ import { parseQueryString } from "../../Query.js";
 
 import { reprStr, repr } from "./php.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -49,7 +49,6 @@ function removeTrailingComma(str: string): string {
   return str;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function jsonToPhp(obj: any, indent = 0): string {
   if (obj === null) {
     return "null";
@@ -111,7 +110,7 @@ function jsonStrToPhp(obj: string, indent = 0): [string, boolean] {
 
 export function _toPhpGuzzle(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
   const url = request.urls[0].queryDict
@@ -199,7 +198,12 @@ export function _toPhpGuzzle(
 
   // TODO: \GuzzleHttp\Cookie\CookieJar::fromArray
 
-  if (request.multipartUploads) {
+  if (request.urls[0].uploadFile) {
+    options += `    'body' => Psr7\\Utils::tryFopen(${repr(
+      request.urls[0].uploadFile,
+    )}, 'r')\n`;
+    imports.add("GuzzleHttp\\Psr7");
+  } else if (request.multipartUploads) {
     options += "    'multipart' => [\n";
     for (const m of request.multipartUploads) {
       options += "        [\n";
@@ -212,7 +216,7 @@ export function _toPhpGuzzle(
           options += `            'filename' => ${repr(m.filename)},\n`;
         }
         options += `            'contents' => Psr7\\Utils::tryFopen(${repr(
-          m.contentFile
+          m.contentFile,
         )}, 'r'),\n`;
         imports.add("GuzzleHttp\\Psr7");
         // TODO: set content type from file extension
@@ -225,11 +229,6 @@ export function _toPhpGuzzle(
     options = removeTrailingComma(options);
     options += "    ],\n";
     // TODO: remove some headers?
-  } else if (request.urls[0].uploadFile) {
-    options += `    'body' => Psr7\\Utils::tryFopen(${repr(
-      request.urls[0].uploadFile
-    )}, 'r')\n`;
-    imports.add("GuzzleHttp\\Psr7");
   } else if (request.data) {
     const contentType = request.headers.getContentType();
     if (contentType === "application/x-www-form-urlencoded") {
@@ -357,7 +356,7 @@ export function _toPhpGuzzle(
 
 export function toPhpGuzzleWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const guzzle = _toPhpGuzzle(requests, warnings);

@@ -37,6 +37,7 @@
       }
     ],
     "authType": "basic",
+    "proxyAuthType": "basic",
     "headers": {
       "lowercase": false,
       "headers": [
@@ -49,6 +50,10 @@
           "Bearer $DO_API_TOKEN"
         ]
       ]
+    },
+    "proxyHeaders": {
+      "lowercase": false,
+      "headers": []
     }
   }
 ]

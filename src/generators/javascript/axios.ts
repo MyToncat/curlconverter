@@ -7,17 +7,16 @@ import { parseQueryString } from "../../Query.js";
 import {
   reprStr,
   repr,
-  reprAsStringToStringDict,
   reprStringToStringList,
-  reprAsStringTuples,
   reprObj,
+  toURLSearchParams,
   asParseFloatTimes1000,
   type JSImports,
   addImport,
   reprImports,
 } from "./javascript.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "max-time",
   "form",
@@ -29,7 +28,7 @@ const supportedArgs = new Set([
 // TODO: @
 function _getDataString(
   request: Request,
-  imports: JSImports
+  imports: JSImports,
 ): [string | null, string | null] {
   if (!request.data) {
     return [null, null];
@@ -68,13 +67,8 @@ function _getDataString(
       if (eq(exactContentType, "application/x-www-form-urlencoded")) {
         request.headers.delete("content-type");
       }
-
-      const queryObj =
-        queryDict && queryDict.every((q) => !Array.isArray(q[1]))
-          ? reprAsStringToStringDict(queryDict as [Word, Word][], 1, imports)
-          : reprAsStringTuples(queryList, 1, imports);
       // TODO: check roundtrip, add a comment
-      return ["new URLSearchParams(" + queryObj + ")", null];
+      return [toURLSearchParams([queryList, queryDict], imports), null];
     } else {
       return [originalStringRepr, null];
     }
@@ -83,7 +77,7 @@ function _getDataString(
 }
 function getDataString(
   request: Request,
-  imports: JSImports
+  imports: JSImports,
 ): [string | null, string | null] {
   if (!request.data) {
     return [null, null];
@@ -108,7 +102,7 @@ function buildConfigObject(
   methods: string[],
   dataMethods: string[],
   hasSearchParams: boolean,
-  imports: JSImports
+  imports: JSImports,
 ): string {
   let code = "{\n";
 
@@ -162,13 +156,13 @@ function buildConfigObject(
   }
 
   if (!dataMethods.includes(methodStr)) {
-    if (request.data) {
+    if (request.multipartUploads) {
+      code += "  data: form,\n";
+    } else if (request.data) {
       if (commentedOutDataString) {
         code += "  // data: " + commentedOutDataString + ",\n";
       }
       code += "  data: " + dataString + ",\n";
-    } else if (request.multipartUploads) {
-      code += "  data: form,\n";
     }
   }
 
@@ -237,7 +231,7 @@ function buildConfigObject(
 
 export function _toNodeAxios(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const request = getFirst(requests, warnings);
 
@@ -270,7 +264,7 @@ export function _toNodeAxios(
     for (const m of request.multipartUploads) {
       code += "form.append(" + repr(m.name, imports) + ", ";
       if ("contentFile" in m) {
-        addImport(imports, "fs", "fs");
+        addImport(imports, "* as fs", "fs");
         if (eq(m.contentFile, "-")) {
           code += "fs.readFileSync(0).toString()";
         } else {
@@ -323,7 +317,9 @@ export function _toNodeAxios(
   if (needsData) {
     code += "\n";
     code += "  " + repr(url, imports) + ",\n";
-    if (request.data) {
+    if (request.multipartUploads) {
+      code += "  form";
+    } else if (request.data) {
       try {
         [dataString, commentedOutDataString] = getDataString(request, imports);
         if (!dataString) {
@@ -336,8 +332,6 @@ export function _toNodeAxios(
         code += "  // " + commentedOutDataString + ",\n";
       }
       code += "  " + dataString;
-    } else if (request.multipartUploads) {
-      code += "  form";
     } else if (needsConfig) {
       // TODO: this works but maybe undefined would be more correct?
       code += "  ''";
@@ -367,7 +361,7 @@ export function _toNodeAxios(
       methods,
       dataMethods,
       !!hasSearchParams,
-      imports
+      imports,
     );
     if (needsData) {
       code += ",\n";
@@ -390,7 +384,7 @@ export function _toNodeAxios(
 }
 export function toNodeAxiosWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const nodeAxios = _toNodeAxios(requests, warnings);

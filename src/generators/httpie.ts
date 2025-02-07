@@ -8,7 +8,7 @@ import { parseQueryString } from "../Query.js";
 
 import { repr, reprStr } from "./wget.js";
 
-const supportedArgs = new Set([
+export const supportedArgs = new Set([
   ...COMMON_SUPPORTED_ARGS,
   "form",
   "form-string",
@@ -99,14 +99,14 @@ function escapeJsonStr(value: string): string {
     throw new CCError(
       "Unrepresentable JSON string: " +
         JSON.stringify(value) +
-        ' (starts with "\\=")'
+        ' (starts with "\\=")',
     );
   }
   if (value.startsWith("\\@")) {
     throw new CCError(
       "Unrepresentable JSON string: " +
         JSON.stringify(value) +
-        ' (starts with "\\@")'
+        ' (starts with "\\@")',
     );
   }
   if (value.startsWith("=") || value.startsWith("@")) {
@@ -114,7 +114,6 @@ function escapeJsonStr(value: string): string {
   }
   return value;
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function toJson(obj: any, key = ""): string[] {
   if (obj === null) {
     return [reprStr(key) + ":=null"];
@@ -139,8 +138,8 @@ function toJson(obj: any, key = ""): string[] {
           value,
           key
             ? key + "[" + escapeJsonName(name) + "]"
-            : escapeJsonName(name, true)
-        )
+            : escapeJsonName(name, true),
+        ),
       )
       .flat();
   }
@@ -195,7 +194,7 @@ function urlencodedAsHttpie(flags: string[], items: string[], data: Word) {
   flags.push("--form");
   for (const [name, value] of queryList) {
     items.push(
-      repr(mergeWords([escapeQueryName(name), "=", escapeQueryValue(value)]))
+      repr(mergeWords(escapeQueryName(name), "=", escapeQueryValue(value))),
     );
   }
 }
@@ -204,7 +203,7 @@ function formatData(
   flags: string[],
   items: string[],
   data: Word,
-  headers: Headers
+  headers: Headers,
 ) {
   const contentType = headers.getContentType();
   if (contentType === "application/json" && data.isString()) {
@@ -224,7 +223,7 @@ function escapeFormName(name: Word): Word {
 function requestToHttpie(
   request: Request,
   url: RequestUrl,
-  warnings: Warnings
+  warnings: Warnings,
 ): string {
   const flags: string[] = [];
   let method: string | null = null;
@@ -243,18 +242,18 @@ function requestToHttpie(
   if (request.headers.length) {
     for (const [headerName, headerValue] of request.headers) {
       if (headerValue === null) {
-        items.push(repr(mergeWords([escapeHeader(headerName), ":"])));
+        items.push(repr(mergeWords(escapeHeader(headerName), ":")));
       } else if (!headerValue.toBool()) {
-        items.push(repr(mergeWords([escapeHeader(headerName), ";"])));
+        items.push(repr(mergeWords(escapeHeader(headerName), ";")));
       } else {
         items.push(
           repr(
-            mergeWords([
+            mergeWords(
               escapeHeader(headerName),
               ":",
               escapeHeaderValue(headerValue),
-            ])
-          )
+            ),
+          ),
         );
       }
     }
@@ -291,14 +290,14 @@ function requestToHttpie(
     }
     // TODO: -A bearer -a token
 
-    flags.push("-a " + repr(mergeWords([user, ":", password])));
+    flags.push("-a " + repr(mergeWords(user, ":", password)));
   }
 
   if (url.queryList) {
     urlArg = url.urlWithoutQueryList;
     for (const [name, value] of url.queryList) {
       items.push(
-        repr(mergeWords([escapeQueryName(name), "==", escapeQueryValue(value)]))
+        repr(mergeWords(escapeQueryName(name), "==", escapeQueryValue(value))),
       );
     }
   }
@@ -312,17 +311,6 @@ function requestToHttpie(
     } else {
       items.push("@" + repr(url.uploadFile));
     }
-  } else if (
-    request.dataArray &&
-    request.dataArray.length === 1 &&
-    !(request.dataArray[0] instanceof Word) &&
-    !request.dataArray[0].name
-  ) {
-    // TODO: surely --upload-file and this can't be identical,
-    // doesn't this ignore url encoding?
-    items.push("@" + repr(request.dataArray[0].filename));
-  } else if (request.data) {
-    formatData(flags, items, request.data, request.headers);
   } else if (request.multipartUploads) {
     flags.push("--multipart");
     for (const m of request.multipartUploads) {
@@ -342,6 +330,17 @@ function requestToHttpie(
         }
       }
     }
+  } else if (
+    request.dataArray &&
+    request.dataArray.length === 1 &&
+    !(request.dataArray[0] instanceof Word) &&
+    !request.dataArray[0].name
+  ) {
+    // TODO: surely --upload-file and this can't be identical,
+    // doesn't this ignore url encoding?
+    items.push("@" + repr(request.dataArray[0].filename));
+  } else if (request.data) {
+    formatData(flags, items, request.data, request.headers);
   }
 
   if (request.followRedirects || request.followRedirectsTrusted) {
@@ -458,7 +457,7 @@ function requestToHttpie(
 
 export function _toHttpie(
   requests: Request[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): string {
   const commands = [];
 
@@ -495,7 +494,7 @@ export function _toHttpie(
 
 export function toHttpieWarn(
   curlCommand: string | string[],
-  warnings: Warnings = []
+  warnings: Warnings = [],
 ): [string, Warnings] {
   const requests = parse(curlCommand, supportedArgs, warnings);
   const httpie = _toHttpie(requests, warnings);

@@ -19,6 +19,7 @@
       }
     ],
     "authType": "basic",
+    "proxyAuthType": "basic",
     "headers": {
       "lowercase": false,
       "headers": [
@@ -51,6 +52,10 @@
           "keep-alive"
         ]
       ]
+    },
+    "proxyHeaders": {
+      "lowercase": false,
+      "headers": []
     },
     "cookies": [
       [
